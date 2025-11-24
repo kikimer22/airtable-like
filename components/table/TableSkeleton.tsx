@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/table';
 import { UiSkeleton } from '@/components/ui/skeleton';
 
-interface SkeletonTableProps {
+interface TableSkeletonProps {
   rows: number;
   columns: number;
 }
@@ -16,13 +16,13 @@ interface SkeletonTableProps {
 /**
  * Skeleton loading component for table
  */
-export const SkeletonTable = ({ rows, columns }: SkeletonTableProps) => (
+const TableSkeleton = ({ rows, columns }: TableSkeletonProps) => (
   <UiTable>
     <UiTableHeader>
       <UiTableRow>
         {Array.from({ length: columns }).map((_, columnIndex) => (
-          <UiTableHead key={columnIndex}>
-            <UiSkeleton className="h-5 w-full" />
+          <UiTableHead key={columnIndex} className="bg-secondary w-full">
+            <UiSkeleton className="h-5 w-full"/>
           </UiTableHead>
         ))}
       </UiTableRow>
@@ -32,7 +32,7 @@ export const SkeletonTable = ({ rows, columns }: SkeletonTableProps) => (
         <UiTableRow key={rowIndex}>
           {Array.from({ length: columns }).map((_, columnIndex) => (
             <UiTableCell key={columnIndex} className="w-full">
-              <UiSkeleton className="h-5 w-full" />
+              <UiSkeleton className="h-5 w-full"/>
             </UiTableCell>
           ))}
         </UiTableRow>
@@ -41,4 +41,4 @@ export const SkeletonTable = ({ rows, columns }: SkeletonTableProps) => (
   </UiTable>
 );
 
-export default SkeletonTable;
+export default TableSkeleton;

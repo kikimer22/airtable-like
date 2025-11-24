@@ -1,8 +1,8 @@
 import type { ColumnDef } from '@tanstack/react-table';
-import type { Person } from '@/mock/types';
 import EditableCell from '@/components/table/EditableCell';
+import type { MockDataRow } from '@/lib/types/table';
 
-const defaultColumn: Partial<ColumnDef<Person>> = {
+const defaultColumn: Partial<ColumnDef<MockDataRow>> = {
   cell: ({ getValue, row: { index }, column: { id }, table }) => {
     return (
       <EditableCell

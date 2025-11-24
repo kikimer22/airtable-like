@@ -1,89 +1,86 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import type { Person } from '@/mock/types';
-import { COLUMNS_LENGTH, makeColumns } from '@/mock/tableData';
+import { TABLE_CONFIG, makeColumns } from '@/mock/tableData';
 import {
   useTableData,
   useTableSorting,
   useInfiniteScroll,
   useVirtualPadding,
   useVirtualizedTable,
+  useTableEditing,
 } from '@/lib/hooks';
 import TableLoading from '@/components/table/TableLoading';
 import TableContent from '@/components/table/TableContent';
 import TableFooter from '@/components/table/TableFooter';
+import type { MockDataRow } from '@/lib/types/table';
 
 /**
  * High-performance virtual table component with infinite scrolling and sorting
  */
 const Table = () => {
-  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const prevSortingRef = useRef<string>('');
 
-  // Setup columns
-  const columns = useMemo<ColumnDef<Person>[]>(
-    () => makeColumns(COLUMNS_LENGTH) as unknown as ColumnDef<Person>[],
-    []
-  );
-
-  // Setup sorting
+  // 1. Setup sorting (optimistic update)
   const { sorting, handleSortingChange } = useTableSorting();
 
-  // Fetch data
+  // 2. Fetch data with current sorting (React Query auto-refetches when queryKey changes)
   const { flatData, totalRowCount, totalFetched, isFetching, isLoading, fetchNextPage } =
     useTableData(sorting);
 
-  // Setup table and virtualizers
-  const { table, rowVirtualizer, columnVirtualizer } = useVirtualizedTable({
-    data: flatData,
-    columns,
-    sorting,
-    onSortingChange: handleSortingChange,
-    containerRef: tableContainerRef,
-  });
+  // 3. Setup table editing
+  const { editedData, updateData } = useTableEditing(flatData);
 
-  // Setup infinite scroll
-  const { containerRef, handleScroll } = useInfiniteScroll(
+  // 4. Setup infinite scroll
+  const { containerRef, sentinelRef } = useInfiniteScroll(
     () => fetchNextPage(),
     {
-      threshold: 500,
       enabled: !isFetching && totalFetched < totalRowCount,
     }
   );
 
-  // ...existing code...
-  useEffect(() => {
-    tableContainerRef.current = containerRef.current;
-  }, [containerRef]);
+  // 5. Setup columns
+  const columns = useMemo<ColumnDef<MockDataRow>[]>(() => makeColumns(TABLE_CONFIG.COLUMNS_LENGTH), []);
 
-  useEffect(() => {
-    table.setOptions((prev) => ({
-      ...prev,
-      onSortingChange: handleSortingChange,
-    }));
-  }, [handleSortingChange, table]);
+  // 6. Setup table and virtualizers
+  const { table, rowVirtualizer, columnVirtualizer } = useVirtualizedTable({
+    data: editedData,
+    columns,
+    sorting,
+    onSortingChange: handleSortingChange,
+    containerRef,
+    onUpdateData: updateData,
+  });
 
+  // 7. Reset scroll on sorting change
   useEffect(() => {
-    handleScroll(tableContainerRef.current);
-  }, [handleScroll]);
+    const sortingKey = JSON.stringify(sorting);
+    if (sortingKey !== prevSortingRef.current && prevSortingRef.current !== '') {
+      prevSortingRef.current = sortingKey;
+      if (rowVirtualizer) {
+        rowVirtualizer.scrollToIndex?.(0);
+      }
+    } else if (prevSortingRef.current === '') {
+      prevSortingRef.current = sortingKey;
+    }
+  }, [sorting, rowVirtualizer]);
 
-  // Calculate virtual padding
+  // 8. Calculate virtual padding
   const { paddingLeft: virtualPaddingLeft, paddingRight: virtualPaddingRight } =
     useVirtualPadding(columnVirtualizer);
 
   const virtualRows = rowVirtualizer.getVirtualItems();
 
-  if (!isLoading) {
+  if (isLoading) {
     return <TableLoading/>;
   }
 
   return (
-    <div className="w-full flex flex-col justify-center items-center gap-4">
+    <div className="relative w-full flex flex-col justify-center items-center gap-2">
       <div
-        className="container h-[800px] overflow-auto relative"
-        ref={tableContainerRef}
-        onScroll={(e) => handleScroll(e.currentTarget)}
+        className="container h-[785px] overflow-auto relative"
+        ref={containerRef}
       >
         <TableContent
           table={table}
@@ -93,8 +90,9 @@ const Table = () => {
           virtualPaddingRight={virtualPaddingRight}
           virtualRows={virtualRows}
         />
+        <div ref={sentinelRef} style={{ height: '1px' }}/>
       </div>
-      {/*<TableFooter isFetching={isFetching}/>*/}
+      <TableFooter isFetching={isFetching}/>
     </div>
   );
 };
