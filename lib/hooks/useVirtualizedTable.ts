@@ -2,11 +2,12 @@ import type { RefObject } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { ColumnDef, OnChangeFn, SortingState, TableMeta } from '@tanstack/react-table';
 import { useReactTable, getCoreRowModel } from '@tanstack/react-table';
-import { TABLE_CONFIG } from '@/mock/tableData';
+import { TABLE_CONFIG } from '@/lib/table/tableData';
 import type { MockDataRow } from '@/lib/types/table';
 
 interface TableMetaWithUpdate extends TableMeta<MockDataRow> {
   updateData?: (rowIndex: number, columnId: string, value: unknown) => void;
+  isSaving?: boolean;
 }
 
 interface UseVirtualizedTableOptions {
@@ -16,11 +17,9 @@ interface UseVirtualizedTableOptions {
   onSortingChange: OnChangeFn<SortingState>;
   containerRef?: RefObject<HTMLDivElement | null>;
   onUpdateData?: (rowIndex: number, columnId: string, value: unknown) => void;
+  isSaving?: boolean;
 }
 
-/**
- * Hook for creating and managing React Table with virtualization
- */
 export const useVirtualizedTable = ({
   data,
   columns,
@@ -28,6 +27,7 @@ export const useVirtualizedTable = ({
   onSortingChange,
   containerRef,
   onUpdateData,
+  isSaving = false,
 }: UseVirtualizedTableOptions) => {
   const table = useReactTable<MockDataRow>({
     data,
@@ -38,6 +38,7 @@ export const useVirtualizedTable = ({
     onSortingChange,
     meta: {
       updateData: onUpdateData,
+      isSaving,
     } as TableMetaWithUpdate,
   });
 

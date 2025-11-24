@@ -1,13 +1,13 @@
 import type { ColumnDef } from '@tanstack/react-table';
-import defaultColumn from '@/mock/defaultColumn';
+import defaultColumn from '@/lib/table/defaultColumn';
 import type { MockDataRow } from '@/lib/types/table';
 import { TABLE_FIELD_KEYS, getFieldKind } from '@/lib/table/schema';
 import type { TableFieldKind } from '@/lib/table/schema';
 
 export const TABLE_CONFIG = {
-  FETCH_SIZE: 50,
+  FETCH_SIZE: 100,
   FETCH_THRESHOLD: 0,
-  FETCH_ROOT_MARGIN: 500,
+  FETCH_ROOT_MARGIN: 0,
   ROW_HEIGHT: 38,
   ROWS_ON_VIEW: 25,
   COLUMNS_ON_VIEW: 10,

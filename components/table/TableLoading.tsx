@@ -1,5 +1,5 @@
 import TableSkeleton from '@/components/table/TableSkeleton';
-import { TABLE_CONFIG } from '@/mock/tableData';
+import { TABLE_CONFIG } from '@/lib/table/tableData';
 
 /**
  * Table loading state component

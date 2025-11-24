@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import type { Prisma } from '@/lib/generated/prisma/client';
 import { isTableFieldKey } from '@/lib/table/schema';
-import { TABLE_CONFIG } from '@/mock/tableData';
+import { TABLE_CONFIG } from '@/lib/table/tableData';
 
 type SortingPayload = Array<{ id?: string; desc?: boolean }>;
 

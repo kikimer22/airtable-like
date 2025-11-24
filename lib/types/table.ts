@@ -9,4 +9,14 @@ export type MockDataApiResponse = {
   };
 };
 
+export type MockDataEditsMap = Record<number, Partial<MockDataRow>>;
+
+export type MockDataUpdateEntry = {
+  id: number;
+  data: Partial<MockDataRow>;
+};
+
+export type MockDataUpdatePayload = MockDataUpdateEntry[];
+
+
 

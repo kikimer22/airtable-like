@@ -1,38 +1,51 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
+import type { RefObject } from 'react';
 import type { Virtualizer } from '@tanstack/react-virtual';
-import { TABLE_CONFIG } from '@/mock/tableData';
+import { TABLE_CONFIG } from '@/lib/table/tableData';
 
 interface InfiniteScrollOptions {
   threshold?: number;
   enabled?: boolean;
+  direction?: 'up' | 'down';
+  containerRef?: RefObject<HTMLDivElement | null>;
 }
 
-/**
- * Hook for infinite scroll using IntersectionObserver
- */
 export const useInfiniteScroll = (
   fetchMore: () => void,
   options: InfiniteScrollOptions = {}
 ) => {
-  const { threshold = TABLE_CONFIG.FETCH_THRESHOLD, enabled = true } = options;
-  const containerRef = useRef<HTMLDivElement>(null);
+  const {
+    threshold = TABLE_CONFIG.FETCH_THRESHOLD,
+    enabled = true,
+    direction = 'down',
+    containerRef: externalContainerRef,
+  } = options;
+  const internalContainerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useMemo(
+    () => externalContainerRef ?? internalContainerRef,
+    [externalContainerRef]
+  );
   const sentinelRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   useEffect(() => {
     if (!enabled || !containerRef.current || !sentinelRef.current) return;
 
+    const rootMargin =
+      direction === 'down'
+        ? `0px 0px ${TABLE_CONFIG.FETCH_ROOT_MARGIN}px 0px`
+        : `${TABLE_CONFIG.FETCH_ROOT_MARGIN}px 0px 0px 0px`;
+
     const observerOptions: IntersectionObserverInit = {
       root: containerRef.current,
-      rootMargin: `${TABLE_CONFIG.FETCH_ROOT_MARGIN}px`,
+      rootMargin,
       threshold,
     };
 
     const handleIntersection = (entries: IntersectionObserverEntry[]) => {
       entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          fetchMore();
-        }
+        if (!entry.isIntersecting) return;
+        fetchMore();
       });
     };
 
@@ -44,7 +57,7 @@ export const useInfiniteScroll = (
         observerRef.current.disconnect();
       }
     };
-  }, [fetchMore, threshold, enabled]);
+  }, [fetchMore, threshold, enabled, containerRef, direction]);
 
   return { containerRef, sentinelRef };
 };

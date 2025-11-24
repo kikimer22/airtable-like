@@ -1,61 +1,148 @@
-import { useMemo, useRef, useEffect } from 'react';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState, startTransition } from 'react';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import type { SortingState } from '@tanstack/react-table';
-import { TABLE_CONFIG } from '@/mock/tableData';
-import type { MockDataApiResponse } from '@/lib/types/table';
+import { fetchMockTablePage } from '@/lib/api/mockData';
+import type { MockDataRow } from '@/lib/types/table';
 
-const fetchTablePage = async (
-  pageIndex: number,
-  sorting: SortingState,
-): Promise<MockDataApiResponse> => {
-  const response = await fetch('/api/mock-data', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      page: pageIndex,
-      pageSize: TABLE_CONFIG.FETCH_SIZE,
-      sorting,
-    }),
-  });
+const PAGE_WINDOW = 2;
 
-  if (!response.ok) {
-    throw new Error('Не вдалося отримати дані таблиці');
+const buildWindowPages = (center: number, total: number) => {
+  const start = Math.max(0, center - PAGE_WINDOW);
+  const end = Math.min(Math.max(total - 1, 0), center + PAGE_WINDOW);
+  const pages: number[] = [];
+  for (let i = start; i <= end; i++) {
+    pages.push(i);
   }
-
-  return response.json();
+  if (!pages.length) return [Math.max(Math.min(center, total - 1), 0)];
+  return pages;
 };
 
-export const useTableData = (sorting: SortingState) => {
-  const sortingKey = JSON.stringify(sorting);
-  const previousSortingRef = useRef<string>(sortingKey);
+type PageSegment = {
+  page: number;
+  rows: MockDataRow[];
+};
 
-  const query = useInfiniteQuery<MockDataApiResponse>({
-    queryKey: ['mock-data', sortingKey],
-    queryFn: ({ pageParam = 0 }) => fetchTablePage(pageParam as number, sorting),
-    initialPageParam: 0,
-    getNextPageParam: (_lastGroup, groups) => groups.length,
-    refetchOnWindowFocus: false,
+export const useTableData = (sorting: SortingState, requestedPage: number, pageSize: number) => {
+  const sortingKey = JSON.stringify(sorting);
+  const baseQueryKey = useMemo(() => ['mock-data', sortingKey] as const, [sortingKey]);
+  const queryClient = useQueryClient();
+  const previousSortingRef = useRef<string>(sortingKey);
+  const [cachedState, setCachedState] = useState<{ segments: PageSegment[]; pages: number[] }>({
+    segments: [],
+    pages: [],
+  });
+
+  const fallbackTotalPages = Math.max(requestedPage + PAGE_WINDOW + 1, 1);
+  const [effectivePage, totalPages] = useMemo(() => {
+    const normalizedPage = requestedPage < 0 ? 0 : requestedPage;
+    const maxIndex = Math.max(fallbackTotalPages - 1, 0);
+    const clamped = Math.min(normalizedPage, maxIndex);
+    return [clamped, fallbackTotalPages] as const;
+  }, [requestedPage, fallbackTotalPages]);
+
+  const windowPages = useMemo(
+    () => buildWindowPages(effectivePage, totalPages),
+    [effectivePage, totalPages],
+  );
+
+  const pageQueries = useQueries({
+    queries: windowPages.map((page) => ({
+      queryKey: [...baseQueryKey, page] as const,
+      queryFn: () => fetchMockTablePage(page, sorting),
+      staleTime: 60_000,
+      gcTime: 60_000,
+    })),
   });
 
   useEffect(() => {
     if (sortingKey !== previousSortingRef.current) {
       previousSortingRef.current = sortingKey;
-      query.refetch();
+      queryClient.removeQueries({ queryKey: baseQueryKey, exact: false });
     }
-  }, [sortingKey, query]);
+  }, [sortingKey, baseQueryKey, queryClient]);
 
-  const flatData = useMemo(
-    () => query.data?.pages?.flatMap((page) => page.data) ?? [],
-    [query.data],
+  const pageDataMap = useMemo(() => {
+    const map = new Map<number, MockDataRow[]>();
+    windowPages.forEach((page, index) => {
+      const rows = pageQueries[index]?.data?.data;
+      if (rows) {
+        map.set(page, rows);
+      }
+    });
+    return map;
+  }, [windowPages, pageQueries]);
+
+  const anyData = pageQueries.find((query) => query.data);
+  const totalRowCount = anyData?.data?.meta?.totalRowCount ?? 0;
+  const derivedTotalPages =
+    totalRowCount > 0 ? Math.max(1, Math.ceil(totalRowCount / pageSize)) : totalPages;
+
+  const adjustedPage = Math.min(effectivePage, Math.max(derivedTotalPages - 1, 0));
+  const adjustedWindowPages = useMemo(
+    () => buildWindowPages(adjustedPage, derivedTotalPages),
+    [adjustedPage, derivedTotalPages],
   );
 
-  const totalRowCount = query.data?.pages?.[0]?.meta?.totalRowCount ?? 0;
+  const combinedSegments: PageSegment[] = useMemo(() => {
+    return adjustedWindowPages.map((page) => ({
+      page,
+      rows: pageDataMap.get(page) ?? [],
+    }));
+  }, [adjustedWindowPages, pageDataMap]);
+
+  const windowReady = adjustedWindowPages.every((page) => pageDataMap.has(page));
+
+  useEffect(() => {
+    if (!windowReady) return;
+    startTransition(() => {
+      setCachedState({
+        segments: combinedSegments,
+        pages: adjustedWindowPages,
+      });
+    });
+  }, [windowReady, combinedSegments, adjustedWindowPages]);
+
+  useEffect(() => {
+    if (!windowReady) return;
+    const allowed = new Set(adjustedWindowPages);
+    queryClient
+      .getQueryCache()
+      .findAll({ queryKey: baseQueryKey, exact: false })
+      .forEach((cachedQuery) => {
+        const [, , cachedPage] = cachedQuery.queryKey as [string, string, number];
+        if (typeof cachedPage !== 'number') return;
+        if (!allowed.has(cachedPage)) {
+          queryClient.removeQueries({ queryKey: cachedQuery.queryKey, exact: true });
+        }
+      });
+  }, [windowReady, adjustedWindowPages, baseQueryKey, queryClient]);
+
+  const displaySegments =
+    windowReady || cachedState.segments.length === 0 ? combinedSegments : cachedState.segments;
+
+  const displayWindowPages =
+    windowReady || cachedState.pages.length === 0 ? adjustedWindowPages : cachedState.pages;
+
+  const adjustedFlatData = useMemo(
+    () => displaySegments.flatMap((segment) => segment.rows),
+    [displaySegments],
+  );
+
+  const isInitialLoading =
+    pageQueries.length === 0 || pageQueries.every((query) => query.isLoading && !query.data);
+  const isFetching = pageQueries.some((query) => query.isFetching);
 
   return {
-    ...query,
-    flatData,
+    flatData: adjustedFlatData,
+    segments: displaySegments,
     totalRowCount,
-    totalFetched: flatData.length,
+    totalPages: derivedTotalPages,
+    currentPage: adjustedPage,
+    windowPages: displayWindowPages,
+    isLoading: isInitialLoading,
+    isFetching,
+    baseQueryKey,
+    pageSize,
   };
 };
 

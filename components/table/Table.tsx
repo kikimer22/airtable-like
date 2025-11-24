@@ -1,12 +1,20 @@
 'use client';
 
-import { useMemo, useEffect, useRef } from 'react';
+import {
+  useMemo,
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useTransition,
+  useDeferredValue,
+} from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { TABLE_CONFIG, makeColumns } from '@/mock/tableData';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { TABLE_CONFIG, makeColumns } from '@/lib/table/tableData';
 import {
   useTableData,
   useTableSorting,
-  useInfiniteScroll,
   useVirtualPadding,
   useVirtualizedTable,
   useTableEditing,
@@ -14,46 +22,103 @@ import {
 import TableLoading from '@/components/table/TableLoading';
 import TableContent from '@/components/table/TableContent';
 import TableFooter from '@/components/table/TableFooter';
-import type { MockDataRow } from '@/lib/types/table';
+import type { MockDataApiResponse, MockDataRow, MockDataUpdatePayload } from '@/lib/types/table';
+import { saveMockTableChanges } from '@/lib/api/mockData';
+import TablePagination from '@/components/table/TablePagination';
 
 /**
  * High-performance virtual table component with infinite scrolling and sorting
  */
 const Table = () => {
   const prevSortingRef = useRef<string>('');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [requestedPage, setRequestedPage] = useState(0);
+  const pendingScrollPageRef = useRef<number | null>(null);
+  const [scrollSignal, setScrollSignal] = useState(0);
+  const [isPageTransitionPending, startPageTransition] = useTransition();
 
   // 1. Setup sorting (optimistic update)
   const { sorting, handleSortingChange } = useTableSorting();
+  const queryClient = useQueryClient();
 
   // 2. Fetch data with current sorting (React Query auto-refetches when queryKey changes)
-  const { flatData, totalRowCount, totalFetched, isFetching, isLoading, fetchNextPage } =
-    useTableData(sorting);
+  const {
+    baseQueryKey,
+    flatData,
+    segments,
+    totalPages,
+    currentPage,
+    windowPages,
+    isFetching,
+    isLoading,
+  } = useTableData(sorting, requestedPage, TABLE_CONFIG.FETCH_SIZE);
 
   // 3. Setup table editing
-  const { editedData, updateData } = useTableEditing(flatData);
+  const deferredData = useDeferredValue(flatData);
+  const {
+    editedData,
+    updateData,
+    resetData,
+    hasPendingEdits,
+    serializeEdits,
+  } = useTableEditing(deferredData);
 
-  // 4. Setup infinite scroll
-  const { containerRef, sentinelRef } = useInfiniteScroll(
-    () => fetchNextPage(),
-    {
-      enabled: !isFetching && totalFetched < totalRowCount,
-    }
-  );
+  const {
+    mutateAsync: persistChanges,
+    isPending: isSaving,
+  } = useMutation({
+    mutationFn: saveMockTableChanges,
+  });
 
-  // 5. Setup columns
+  // 4. Setup columns
   const columns = useMemo<ColumnDef<MockDataRow>[]>(() => makeColumns(TABLE_CONFIG.COLUMNS_LENGTH), []);
 
-  // 6. Setup table and virtualizers
+  const handlePageChange = useCallback(
+    (nextPage: number, options: { scrollToTop?: boolean } = {}) => {
+      const maxIndex = Math.max(totalPages - 1, 0);
+      const clamped = Math.max(0, Math.min(nextPage, maxIndex));
+      if (clamped === requestedPage) {
+        if (options.scrollToTop !== false) {
+          pendingScrollPageRef.current = clamped;
+          setScrollSignal((token) => token + 1);
+        }
+        return;
+      }
+      startPageTransition(() => {
+        setRequestedPage(clamped);
+      });
+      if (options.scrollToTop !== false) {
+        pendingScrollPageRef.current = clamped;
+        setScrollSignal((token) => token + 1);
+      }
+    },
+    [totalPages, requestedPage],
+  );
+
+  const handleSortingChangeWithReset = useCallback(
+    (updater: Parameters<typeof handleSortingChange>[0]) => {
+      pendingScrollPageRef.current = 0;
+      setScrollSignal((token) => token + 1);
+      startPageTransition(() => setRequestedPage(0));
+      handleSortingChange(updater);
+    },
+    [handleSortingChange],
+  );
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // 5. Setup table and virtualizers
   const { table, rowVirtualizer, columnVirtualizer } = useVirtualizedTable({
     data: editedData,
     columns,
     sorting,
-    onSortingChange: handleSortingChange,
+    onSortingChange: handleSortingChangeWithReset,
     containerRef,
     onUpdateData: updateData,
+    isSaving,
   });
 
-  // 7. Reset scroll on sorting change
+  // 6. Reset scroll on sorting change
   useEffect(() => {
     const sortingKey = JSON.stringify(sorting);
     if (sortingKey !== prevSortingRef.current && prevSortingRef.current !== '') {
@@ -66,11 +131,103 @@ const Table = () => {
     }
   }, [sorting, rowVirtualizer]);
 
-  // 8. Calculate virtual padding
+  // 7. Calculate virtual padding
   const { paddingLeft: virtualPaddingLeft, paddingRight: virtualPaddingRight } =
     useVirtualPadding(columnVirtualizer);
 
   const virtualRows = rowVirtualizer.getVirtualItems();
+
+  const pageOffsets = useMemo(() => {
+    const offsets = new Map<number, number>();
+    let offset = 0;
+    segments.forEach((segment) => {
+      offsets.set(segment.page, offset);
+      offset += segment.rows.length;
+    });
+    return offsets;
+  }, [segments]);
+
+  const pageRanges = useMemo(() => {
+    const ranges: Array<{ page: number; start: number; end: number }> = [];
+    let offset = 0;
+    segments.forEach((segment) => {
+      const start = offset;
+      const end = start + segment.rows.length;
+      ranges.push({ page: segment.page, start, end });
+      offset = end;
+    });
+    return ranges;
+  }, [segments]);
+
+  const majorityPage = useMemo(() => {
+    if (!virtualRows.length) return currentPage;
+    const midIndex = Math.round(
+      (virtualRows[0].index + virtualRows[virtualRows.length - 1].index) / 2,
+    );
+    const range =
+      pageRanges.find((candidate) => midIndex >= candidate.start && midIndex < candidate.end) ??
+      pageRanges[pageRanges.length - 1];
+    return range?.page ?? currentPage;
+  }, [virtualRows, pageRanges, currentPage]);
+
+  useEffect(() => {
+    if (pendingScrollPageRef.current != null) return;
+    if (majorityPage === requestedPage) return;
+    startPageTransition(() => setRequestedPage(majorityPage));
+  }, [majorityPage, requestedPage, startPageTransition]);
+
+  useEffect(() => {
+    const targetPage = pendingScrollPageRef.current;
+    if (targetPage == null) return;
+    const targetOffset = pageOffsets.get(targetPage);
+    if (targetOffset == null) return;
+    if (containerRef.current) {
+      containerRef.current.scrollTo({ top: 0, behavior: 'auto' });
+    }
+    rowVirtualizer.scrollToIndex(targetOffset);
+    pendingScrollPageRef.current = null;
+  }, [scrollSignal, pageOffsets, rowVirtualizer]);
+
+  const handleResetChanges = useCallback(() => {
+    setSaveError(null);
+    resetData();
+  }, [resetData]);
+
+  const updateQueryCache = useCallback(
+    (changes: MockDataUpdatePayload) => {
+      if (!changes.length) return;
+      const changeMap = new Map(changes.map(({ id, data }) => [id, data]));
+      queryClient
+        .getQueryCache()
+        .findAll({ queryKey: baseQueryKey, exact: false })
+        .forEach((cacheEntry) => {
+          queryClient.setQueryData<MockDataApiResponse>(cacheEntry.queryKey, (prev) => {
+            if (!prev) return prev;
+            const updatedData = prev.data.map((row) => {
+              const update = changeMap.get(row.id);
+              return update ? { ...row, ...update } : row;
+            });
+            return { ...prev, data: updatedData };
+          });
+        });
+    },
+    [queryClient, baseQueryKey],
+  );
+
+  const handleSaveChanges = useCallback(async () => {
+    if (!hasPendingEdits) return;
+    setSaveError(null);
+    const payload = serializeEdits();
+    if (!payload.length) return;
+    try {
+      await persistChanges(payload);
+      updateQueryCache(payload);
+      resetData();
+    } catch (error) {
+      console.error('Failed to save table changes', error);
+      setSaveError(error instanceof Error ? error.message : 'Не вдалося зберегти зміни');
+    }
+  }, [hasPendingEdits, serializeEdits, persistChanges, updateQueryCache, resetData]);
 
   if (isLoading) {
     return <TableLoading/>;
@@ -90,9 +247,21 @@ const Table = () => {
           virtualPaddingRight={virtualPaddingRight}
           virtualRows={virtualRows}
         />
-        <div ref={sentinelRef} style={{ height: '1px' }}/>
       </div>
-      <TableFooter isFetching={isFetching}/>
+      <TableFooter
+        isFetching={isFetching || isPageTransitionPending}
+        hasChanges={hasPendingEdits}
+        isSaving={isSaving}
+        onSave={handleSaveChanges}
+        onReset={handleResetChanges}
+        errorMessage={saveError}
+      />
+      {/*<TablePagination*/}
+      {/*  page={majorityPage}*/}
+      {/*  totalPages={totalPages}*/}
+      {/*  cachedPages={windowPages}*/}
+      {/*  onPageChange={(nextPage) => handlePageChange(nextPage, { scrollToTop: true })}*/}
+      {/*/>*/}
     </div>
   );
 };
