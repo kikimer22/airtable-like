@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, startTransition } from 'react';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import type { SortingState } from '@tanstack/react-table';
-import { fetchMockTablePage } from '@/lib/api/mockData';
+import { fetchTablePage } from '@/lib/api/tableData';
 import type { MockDataRow } from '@/lib/types/table';
 
 const PAGE_WINDOW = 2;
@@ -24,7 +24,7 @@ type PageSegment = {
 
 export const useTableData = (sorting: SortingState, requestedPage: number, pageSize: number) => {
   const sortingKey = JSON.stringify(sorting);
-  const baseQueryKey = useMemo(() => ['mock-data', sortingKey] as const, [sortingKey]);
+  const baseQueryKey = useMemo(() => ['table-data', sortingKey] as const, [sortingKey]);
   const queryClient = useQueryClient();
   const previousSortingRef = useRef<string>(sortingKey);
   const [cachedState, setCachedState] = useState<{ segments: PageSegment[]; pages: number[] }>({
@@ -48,7 +48,7 @@ export const useTableData = (sorting: SortingState, requestedPage: number, pageS
   const pageQueries = useQueries({
     queries: windowPages.map((page) => ({
       queryKey: [...baseQueryKey, page] as const,
-      queryFn: () => fetchMockTablePage(page, sorting),
+      queryFn: () => fetchTablePage(page, sorting),
       staleTime: 60_000,
       gcTime: 60_000,
     })),

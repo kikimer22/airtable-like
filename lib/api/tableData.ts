@@ -4,11 +4,11 @@ import type { MockDataApiResponse, MockDataUpdatePayload } from '@/lib/types/tab
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
-export const fetchMockTablePage = async (
+export const fetchTablePage = async (
   pageIndex: number,
   sorting: SortingState,
 ): Promise<MockDataApiResponse> => {
-  const response = await fetch('/api/mock-data', {
+  const response = await fetch('/api/table-data', {
     method: 'POST',
     headers: jsonHeaders,
     body: JSON.stringify({
@@ -25,10 +25,10 @@ export const fetchMockTablePage = async (
   return response.json();
 };
 
-export const saveMockTableChanges = async (changes: MockDataUpdatePayload): Promise<void> => {
+export const saveTableChanges = async (changes: MockDataUpdatePayload): Promise<void> => {
   if (!changes.length) return;
 
-  const response = await fetch('/api/mock-data/bulk-update', {
+  const response = await fetch('/api/table-data/update', {
     method: 'POST',
     headers: jsonHeaders,
     body: JSON.stringify({ changes }),

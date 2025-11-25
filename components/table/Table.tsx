@@ -10,25 +10,22 @@ import {
   useDeferredValue,
 } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
+import { getQueryClient } from '@/lib/getQueryClient';
 import { TABLE_CONFIG, makeColumns } from '@/lib/table/tableData';
 import {
   useTableData,
   useTableSorting,
   useVirtualPadding,
   useVirtualizedTable,
-  useTableEditing,
+  useTableEditing, useEventSource,
 } from '@/lib/hooks';
-import TableLoading from '@/components/table/TableLoading';
+import TableLoading from '@/components/Table-2/TableLoading';
 import TableContent from '@/components/table/TableContent';
 import TableFooter from '@/components/table/TableFooter';
 import type { MockDataApiResponse, MockDataRow, MockDataUpdatePayload } from '@/lib/types/table';
-import { saveMockTableChanges } from '@/lib/api/mockData';
-import TablePagination from '@/components/table/TablePagination';
+import { saveTableChanges } from '@/lib/api/tableData';
 
-/**
- * High-performance virtual table component with infinite scrolling and sorting
- */
 const Table = () => {
   const prevSortingRef = useRef<string>('');
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -36,19 +33,28 @@ const Table = () => {
   const pendingScrollPageRef = useRef<number | null>(null);
   const [scrollSignal, setScrollSignal] = useState(0);
   const [isPageTransitionPending, startPageTransition] = useTransition();
+  const { messages, connectionStatus } = useEventSource();
+  const queryClient = getQueryClient();
 
   // 1. Setup sorting (optimistic update)
   const { sorting, handleSortingChange } = useTableSorting();
-  const queryClient = useQueryClient();
+
+  const handleSortingChangeWithReset = useCallback(
+    (updater: Parameters<typeof handleSortingChange>[0]) => {
+      pendingScrollPageRef.current = 0;
+      setScrollSignal((token) => token + 1);
+      startPageTransition(() => setRequestedPage(0));
+      handleSortingChange(updater);
+    },
+    [handleSortingChange],
+  );
 
   // 2. Fetch data with current sorting (React Query auto-refetches when queryKey changes)
   const {
     baseQueryKey,
     flatData,
     segments,
-    totalPages,
     currentPage,
-    windowPages,
     isFetching,
     isLoading,
   } = useTableData(sorting, requestedPage, TABLE_CONFIG.FETCH_SIZE);
@@ -67,47 +73,15 @@ const Table = () => {
     mutateAsync: persistChanges,
     isPending: isSaving,
   } = useMutation({
-    mutationFn: saveMockTableChanges,
+    mutationFn: saveTableChanges,
   });
 
   // 4. Setup columns
   const columns = useMemo<ColumnDef<MockDataRow>[]>(() => makeColumns(TABLE_CONFIG.COLUMNS_LENGTH), []);
 
-  const handlePageChange = useCallback(
-    (nextPage: number, options: { scrollToTop?: boolean } = {}) => {
-      const maxIndex = Math.max(totalPages - 1, 0);
-      const clamped = Math.max(0, Math.min(nextPage, maxIndex));
-      if (clamped === requestedPage) {
-        if (options.scrollToTop !== false) {
-          pendingScrollPageRef.current = clamped;
-          setScrollSignal((token) => token + 1);
-        }
-        return;
-      }
-      startPageTransition(() => {
-        setRequestedPage(clamped);
-      });
-      if (options.scrollToTop !== false) {
-        pendingScrollPageRef.current = clamped;
-        setScrollSignal((token) => token + 1);
-      }
-    },
-    [totalPages, requestedPage],
-  );
-
-  const handleSortingChangeWithReset = useCallback(
-    (updater: Parameters<typeof handleSortingChange>[0]) => {
-      pendingScrollPageRef.current = 0;
-      setScrollSignal((token) => token + 1);
-      startPageTransition(() => setRequestedPage(0));
-      handleSortingChange(updater);
-    },
-    [handleSortingChange],
-  );
-
+  // 5. Setup table and virtualizers
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // 5. Setup table and virtualizers
   const { table, rowVirtualizer, columnVirtualizer } = useVirtualizedTable({
     data: editedData,
     columns,
@@ -169,6 +143,10 @@ const Table = () => {
       pageRanges[pageRanges.length - 1];
     return range?.page ?? currentPage;
   }, [virtualRows, pageRanges, currentPage]);
+
+  useEffect(() => {
+    console.log('messages', messages);
+  }, [messages]);
 
   useEffect(() => {
     if (pendingScrollPageRef.current != null) return;
@@ -235,6 +213,7 @@ const Table = () => {
 
   return (
     <div className="relative w-full flex flex-col justify-center items-center gap-2">
+      <div>connectionStatus: {connectionStatus}</div>
       <div
         className="container h-[785px] overflow-auto relative"
         ref={containerRef}
@@ -256,12 +235,6 @@ const Table = () => {
         onReset={handleResetChanges}
         errorMessage={saveError}
       />
-      {/*<TablePagination*/}
-      {/*  page={majorityPage}*/}
-      {/*  totalPages={totalPages}*/}
-      {/*  cachedPages={windowPages}*/}
-      {/*  onPageChange={(nextPage) => handlePageChange(nextPage, { scrollToTop: true })}*/}
-      {/*/>*/}
     </div>
   );
 };

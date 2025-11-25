@@ -51,5 +51,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Не вдалося зберегти зміни' }, { status: 500 });
   }
 }
-
-

@@ -18,5 +18,9 @@ export type MockDataUpdateEntry = {
 
 export type MockDataUpdatePayload = MockDataUpdateEntry[];
 
-
-
+export interface DbUpdateEvent {
+  table: string;
+  action: 'INSERT' | 'UPDATE' | 'DELETE';
+  data: any;
+  changes?: Record<string, { old: string, new: string }>; // Додаємо зміни
+}

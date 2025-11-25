@@ -13,9 +13,6 @@ interface TableSkeletonProps {
   columns: number;
 }
 
-/**
- * Skeleton loading component for table
- */
 const TableSkeleton = ({ rows, columns }: TableSkeletonProps) => (
   <UiTable>
     <UiTableHeader>
