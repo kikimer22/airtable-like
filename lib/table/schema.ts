@@ -4,9 +4,9 @@ const createRange = (start: number, end: number): number[] =>
   Array.from({ length: end - start + 1 }, (_, index) => start + index);
 
 export const TABLE_COLUMN_SEGMENTS = [
-  { prefix: 'col_s_', start: 1, end: 100, kind: 'string' as const },
-  { prefix: 'col_n_', start: 101, end: 172, kind: 'number' as const },
-  { prefix: 'col_b_', start: 173, end: 222, kind: 'boolean' as const },
+  { prefix: 'col_s_', start: 1, end: 4, kind: 'string' as const }, // 100
+  { prefix: 'col_n_', start: 101, end: 105, kind: 'number' as const }, // 172
+  { prefix: 'col_b_', start: 173, end: 178, kind: 'boolean' as const }, // 222
 ] as const;
 
 const buildKeys = (): string[] => {

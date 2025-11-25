@@ -5,12 +5,13 @@ import { TABLE_FIELD_KEYS, getFieldKind } from '@/lib/table/schema';
 import type { TableFieldKind } from '@/lib/table/schema';
 
 export const TABLE_CONFIG = {
-  FETCH_SIZE: 100,
+  FETCH_SIZE: 10,
   FETCH_THRESHOLD: 0,
   FETCH_ROOT_MARGIN: 0,
+  FETCH_MAX_PAGES: 3,
   ROW_HEIGHT: 38,
-  ROWS_ON_VIEW: 25,
-  COLUMNS_ON_VIEW: 10,
+  ROWS_OVERSCAN: 3,
+  COLUMNS_OVERSCAN: 2,
   TABLE_HEIGHT: 785,
   COLUMNS_LENGTH: TABLE_FIELD_KEYS.length,
 } as const;
