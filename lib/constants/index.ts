@@ -3,7 +3,7 @@ import { TABLE_FIELD_KEYS } from '@/lib/helpers/columnsCreator';
 export const TABLE_CONFIG = {
   FETCH_SIZE: 50,
   FETCH_THRESHOLD: 0,
-  FETCH_ROOT_MARGIN: 0,
+  FETCH_ROOT_MARGIN: 104,
   FETCH_MAX_PAGES: 3,
   ROW_HEIGHT: 52,
   ROWS_OVERSCAN: 2,

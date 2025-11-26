@@ -1,7 +1,7 @@
 'use client';
 
-import type { RefObject, MouseEvent, KeyboardEvent, UIEvent } from 'react';
-import { useEffect, useMemo, useRef, useCallback } from 'react';
+import type { RefObject, MouseEvent, KeyboardEvent } from 'react';
+import { useMemo, useRef } from 'react';
 import type { Cell, ColumnDef, Header, HeaderGroup, Row, Table } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table';
 import type { VirtualItem, Virtualizer } from '@tanstack/react-virtual';
@@ -9,7 +9,6 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { MockDataRow } from '@/lib/types';
 import { makeColumns } from '@/lib/helpers/columnsCreator';
 import { useTableData } from '@/lib/hooks/useTableData';
-import { useInView } from 'react-intersection-observer';
 import {
   UiTable,
   UiTableBody,
@@ -21,8 +20,8 @@ import {
 } from '@/components/ui/table';
 import TableSkeleton from '@/components/table/TableSkeleton';
 import { TABLE_CONFIG } from '@/lib/constants';
-import { decodeCursor } from '@/lib/utils';
 import type { UseTableDataResult } from '@/lib/hooks/useTableData';
+import { useBidirectionalInfinite } from '@/lib/hooks/useBidirectionalInfinite';
 
 export function Table() {
   const tableData = useTableData();
@@ -40,22 +39,13 @@ export function Table() {
   if (tableData.isLoading) {
     return (
       <div className="container h-[785px] overflow-auto relative">
-        <TableSkeleton rows={table.getRowModel().rows.length || TABLE_CONFIG.ROW_HEIGHT}
-                       columns={table.getVisibleLeafColumns().length || 9}/>
+        <TableSkeleton rows={TABLE_CONFIG.FETCH_SIZE}
+                       columns={9}/>
       </div>
     );
   }
 
-  return (
-    <div>
-      <button onClick={() => tableData.fetchNextPage()}>fetchNextPage Data</button>
-      <div><br/></div>
-      <button onClick={() => tableData.fetchPreviousPage()}>fetchPreviousPage Data</button>
-      <br/>
-      <br/>
-      <TableContainer table={table} tableData={tableData}/>
-    </div>
-  );
+  return <TableContainer table={table} tableData={tableData}/>;
 }
 
 // =================================== CONTAINER ===================================
@@ -67,31 +57,19 @@ interface TableContainerProps {
 
 function TableContainer({
   table, tableData: {
-    data,
-    flattenedData,
-    isLoading,
     hasNextPage,
     hasPreviousPage,
     isFetchingNextPage,
     isFetchingPreviousPage,
     fetchNextPage,
     fetchPreviousPage,
-    isFetching,
+    flattenedData,
+    loadedPagesCount,
   }
 }: TableContainerProps) {
-  const isPageLimitReached = useMemo(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cursor = (data as any)?.pageParams?.at(-1)?.cursor;
-    const currentPageIndex = cursor ? Math.ceil(decodeCursor(cursor) / TABLE_CONFIG.FETCH_SIZE) : 0;
-    return currentPageIndex >= (TABLE_CONFIG.FETCH_MAX_PAGES || 0);
-  }, [data]);
-  const { ref: footerAnchorRef, inView } = useInView();
   const visibleColumns = table.getVisibleLeafColumns();
   const tableContainerRef = useRef<HTMLDivElement>(null);
-  const columnVirtualizer = useVirtualizer<
-    HTMLDivElement,
-    HTMLTableCellElement
-  >({
+  const columnVirtualizer = useVirtualizer<HTMLDivElement, HTMLTableCellElement>({
     count: visibleColumns.length,
     estimateSize: index => visibleColumns[index].getSize(),
     getScrollElement: () => tableContainerRef.current,
@@ -108,58 +86,26 @@ function TableContainer({
       (virtualColumns[virtualColumns.length - 1]?.end ?? 0);
   }
 
-  //called on scroll and possibly on mount to fetch more data as the user scrolls and reaches bottom of table
-  const fetchMoreOnBottomReached = useCallback(
-    (containerRefElement?: HTMLDivElement | null) => {
-      if (containerRefElement) {
-        const { scrollHeight, scrollTop, clientHeight } = containerRefElement;
-        //once the user has scrolled within 500px of the bottom of the table, fetch more data if we can
-        if (scrollHeight - scrollTop - clientHeight < 500 && !isFetchingNextPage && hasNextPage) {
-          void fetchNextPage();
-        }
-      }
-    },
-    [fetchNextPage, isFetchingNextPage, hasNextPage]
-  );
-
-  // //a check on mount and after a fetch to see if the table is already scrolled to the bottom and immediately needs to fetch more data
-  // useEffect(() => {
-  //   fetchMoreOnBottomReached(tableContainerRef.current);
-  // }, [fetchMoreOnBottomReached]);
-
-  // const onScroll = ({ currentTarget: { scrollTop } }: UIEvent<HTMLDivElement>) => {
-  //   console.warn('scrollTop', scrollTop);
-  //   if (isPageLimitReached && scrollTop < (TABLE_CONFIG.ROW_HEIGHT + TABLE_CONFIG.ROWS_OVERSCAN) && hasPreviousPage && !isFetchingPreviousPage && !isLoading) {
-  //     void fetchPreviousPage();
-  //   }
-  // };
-  //
-  // useEffect(() => {
-  //   if (inView && !isFetchingNextPage && hasNextPage && !isLoading) {
-  //     void fetchNextPage();
-  //   }
-  // }, [inView, isFetchingNextPage, hasNextPage, isLoading, fetchNextPage]);
-  //
-  // useEffect(() => {
-  //   if (isPageLimitReached) {
-  //     tableContainerRef.current?.scrollBy({
-  //       top: -(TABLE_CONFIG.ROW_HEIGHT * (TABLE_CONFIG.FETCH_SIZE + TABLE_CONFIG.ROWS_OVERSCAN) + 2),
-  //       behavior: 'auto',
-  //     });
-  //   } else {
-  //     tableContainerRef.current?.scrollBy({
-  //       top: -(TABLE_CONFIG.ROW_HEIGHT + 2),
-  //       behavior: 'instant',
-  //     });
-  //   }
-  //
-  // }, [isPageLimitReached]);
+  const { headerRef, footerRef } = useBidirectionalInfinite({
+    parentRef: tableContainerRef,
+    fetchNextPage,
+    fetchPreviousPage,
+    isFetchingNextPage,
+    isFetchingPreviousPage,
+    hasNextPage,
+    hasPreviousPage,
+    rowHeight: TABLE_CONFIG.ROW_HEIGHT,
+    pageSize: TABLE_CONFIG.FETCH_SIZE,
+    totalDataLength: flattenedData.length,
+    maxPages: TABLE_CONFIG.FETCH_MAX_PAGES,
+    loadedPagesCount,
+  });
 
   return (
     <div className="container h-[785px] overflow-auto relative"
-         onScroll={e => fetchMoreOnBottomReached(e.currentTarget)}
          ref={tableContainerRef}
     >
+      <div ref={headerRef} className="h-0.25"/>
       <UiTable>
         <TableHead
           columnVirtualizer={columnVirtualizer}
@@ -175,7 +121,7 @@ function TableContainer({
           virtualPaddingRight={virtualPaddingRight}
         />
         <UiTableFooter>
-          <UiTableRow ref={footerAnchorRef}>
+          <UiTableRow ref={footerRef}>
             <UiTableCell colSpan={visibleColumns.length}>
               <div className={`flex items-center gap-2 min-h-9`}>
                 {isFetchingNextPage ? (
@@ -330,19 +276,10 @@ function TableBody({
     //     : undefined,
   });
   const virtualRows = rowVirtualizer.getVirtualItems();
-  // useEffect(() => {
-  //   console.log('rows', rows);
-  // }, [rows]);
-  //
-  // useEffect(() => {
-  //   console.log('virtualRows', virtualRows);
-  // }, [virtualRows]);
   return (
     <UiTableBody style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
       {virtualRows.map(virtualRow => {
         const row = rows[virtualRow.index] as Row<MockDataRow>;
-        // console.log('Virtual virtualRow:', virtualRow);
-        // console.log('Rows:', row);
         return (
           <TableBodyRow
             columnVirtualizer={columnVirtualizer}
@@ -383,7 +320,7 @@ function TableBodyRow({
       data-index={virtualRow.index}
       ref={node => rowVirtualizer.measureElement(node)}
       key={row.id}
-      className="absolute will-change-transform"
+      className="absolute top-0 left-0 will-change-transform"
       style={{
         transform: `translateY(${virtualRow.start}px)`, //this should always be a `style` as it changes on scroll
       }}

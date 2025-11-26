@@ -16,7 +16,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const order = direction === 'forward' ? 'asc' : 'desc';
 
-    const queryOptions: any = {
+    const queryOptions = {
       take,
       orderBy: { id: order },
       select: {
@@ -31,13 +31,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         col_b_174: true,
         col_b_175: true,
       },
-    };
+    } as const;
 
     if (cursor) {
-      queryOptions.cursor = { id: decodeCursor(cursor) };
-      if (direction === 'forward') {
-        queryOptions.skip = 1;
-      }
+      (queryOptions as Record<string, unknown>).cursor = { id: decodeCursor(cursor) };
+      (queryOptions as Record<string, unknown>).skip = 1;
     }
 
     const items = await prisma.mockDataTable.findMany(queryOptions);
@@ -47,11 +45,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const hasExtra = items.length > pageSize;
     const data = hasExtra ? itemsOrdered.slice(0, pageSize) : itemsOrdered;
 
-    const nextCursor = data.length > 0 ? encodeCursor(data[data.length - 1]!.id) : null;
-    const prevCursor = data.length > 0 ? encodeCursor(data[0]!.id) : null;
+    let nextCursor: string | null = null;
+    let prevCursor: string | null = null;
+    let hasNextPage = false;
+    let hasPrevPage = false;
 
-    const hasNextPage = direction === 'forward' ? hasExtra : !!cursor;
-    const hasPrevPage = direction === 'forward' ? !!cursor : hasExtra;
+    if (data.length > 0) {
+      if (direction === 'forward') {
+        nextCursor = hasExtra ? encodeCursor(data[data.length - 1]!.id) : null;
+        prevCursor = cursor ? encodeCursor(data[0]!.id) : null;
+        hasNextPage = hasExtra;
+        hasPrevPage = !!cursor;
+      } else {
+        // direction === 'backward'
+        prevCursor = hasExtra ? encodeCursor(data[0]!.id) : null;
+        nextCursor = cursor ? encodeCursor(data[data.length - 1]!.id) : null;
+        hasPrevPage = hasExtra;
+        hasNextPage = !!cursor;
+      }
+    }
 
     return NextResponse.json<PaginationResponse<typeof data[0]>>({
       data,

@@ -12,7 +12,10 @@ interface PageParam {
 }
 
 export type UseTableDataResult = UseInfiniteQueryResult<InfiniteData<Response, PageParam>, Error> & {
-  flattenedData: MockDataRow[]
+  flattenedData: MockDataRow[];
+  firstPageIndex: number;
+  loadedPagesCount: number;
+  firstPageCursor: Cursor | null;
 };
 
 const fetchData = async ({ pageParam }: QueryFunctionContext): Promise<Response> => {
@@ -56,12 +59,35 @@ export const useTableData = (): UseTableDataResult => {
     maxPages: TABLE_CONFIG.FETCH_MAX_PAGES,
   });
 
-  const flattenedData = useMemo(() => {
-    return infiniteQueryResult?.data?.pages.flatMap((page) => page.data) || [];
+  const { flattenedData, firstPageIndex, loadedPagesCount, firstPageCursor } = useMemo(() => {
+    const pages = infiniteQueryResult?.data?.pages || [];
+    const pagesCount = pages.length;
+    const maxPages = TABLE_CONFIG.FETCH_MAX_PAGES || 1;
+    const firstPageCursor = pages[0]?.meta?.prevCursor;
+
+    let firstIdx = 0;
+    let visiblePages = pages;
+
+    if (pagesCount > maxPages) {
+      firstIdx = pagesCount - maxPages;
+      visiblePages = pages.slice(firstIdx);
+    }
+
+    const data = visiblePages.flatMap((page) => page.data);
+
+    return {
+      flattenedData: data,
+      firstPageIndex: firstIdx,
+      loadedPagesCount: pagesCount,
+      firstPageCursor
+    };
   }, [infiniteQueryResult?.data?.pages]);
 
   return {
     ...infiniteQueryResult,
     flattenedData,
+    firstPageIndex,
+    loadedPagesCount,
+    firstPageCursor
   };
 };

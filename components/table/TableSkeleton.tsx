@@ -13,29 +13,31 @@ interface TableSkeletonProps {
   columns: number;
 }
 
-const TableSkeleton = ({ rows, columns }: TableSkeletonProps) => (
-  <UiTable>
-    <UiTableHeader>
-      <UiTableRow>
-        {Array.from({ length: columns }).map((_, columnIndex) => (
-          <UiTableHead key={columnIndex} className="bg-secondary w-full">
-            <UiSkeleton className="h-9 w-full"/>
-          </UiTableHead>
-        ))}
-      </UiTableRow>
-    </UiTableHeader>
-    <UiTableBody>
-      {Array.from({ length: rows }).map((_, rowIndex) => (
-        <UiTableRow key={rowIndex}>
+const TableSkeleton = ({ rows, columns }: TableSkeletonProps) => {
+  return (
+    <UiTable>
+      <UiTableHeader>
+        <UiTableRow>
           {Array.from({ length: columns }).map((_, columnIndex) => (
-            <UiTableCell key={columnIndex} className="w-full">
+            <UiTableHead key={columnIndex} className={`bg-secondary ${!columnIndex ? 'w-1/2' : 'w-full'}`}>
               <UiSkeleton className="h-9 w-full"/>
-            </UiTableCell>
+            </UiTableHead>
           ))}
         </UiTableRow>
-      ))}
-    </UiTableBody>
-  </UiTable>
-);
+      </UiTableHeader>
+      <UiTableBody>
+        {Array.from({ length: rows }).map((_, rowIndex) => (
+          <UiTableRow key={rowIndex}>
+            {Array.from({ length: columns }).map((_, columnIndex) => (
+              <UiTableCell key={columnIndex} className={!columnIndex ? 'w-1/2' : 'w-full'}>
+                <UiSkeleton className="h-9 w-full"/>
+              </UiTableCell>
+            ))}
+          </UiTableRow>
+        ))}
+      </UiTableBody>
+    </UiTable>
+  );
+};
 
 export default TableSkeleton;
