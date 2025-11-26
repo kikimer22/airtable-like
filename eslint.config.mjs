@@ -32,6 +32,7 @@ const eslintConfig = defineConfig([
       "react/prop-types": "off",
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
+      "react-hooks/incompatible-library": "warn",
 
       // Code Style
       "prefer-const": "warn",

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { DbUpdateEvent } from '@/lib/types/table';
+import type { DbUpdateEvent } from '@/lib/types';
 
-export const useEventSource = (url = '/api/table-data/sse') => {
+export const useEventSource = (url = '/api/old-schemas-data/sse') => {
   const [messages, setMessages] = useState<DbUpdateEvent[]>([]);
   const [connectionStatus, setConnectionStatus] = useState('Connecting...');
 

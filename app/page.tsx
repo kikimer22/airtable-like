@@ -1,5 +1,5 @@
-import { Table } from '@/components/Table-2/Table';
-// import Table from '@/components/table/Table';
+import { Table } from '@/components/table/Table';
+// import Table from '@/components/old-schemas/Table';
 
 export default function Home() {
   return (

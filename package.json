@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "lintFix": "eslint --fix",
     "prisma:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {

@@ -19,7 +19,7 @@ const TableSkeleton = ({ rows, columns }: TableSkeletonProps) => (
       <UiTableRow>
         {Array.from({ length: columns }).map((_, columnIndex) => (
           <UiTableHead key={columnIndex} className="bg-secondary w-full">
-            <UiSkeleton className="h-5 w-full"/>
+            <UiSkeleton className="h-9 w-full"/>
           </UiTableHead>
         ))}
       </UiTableRow>
@@ -29,7 +29,7 @@ const TableSkeleton = ({ rows, columns }: TableSkeletonProps) => (
         <UiTableRow key={rowIndex}>
           {Array.from({ length: columns }).map((_, columnIndex) => (
             <UiTableCell key={columnIndex} className="w-full">
-              <UiSkeleton className="h-5 w-full"/>
+              <UiSkeleton className="h-9 w-full"/>
             </UiTableCell>
           ))}
         </UiTableRow>
