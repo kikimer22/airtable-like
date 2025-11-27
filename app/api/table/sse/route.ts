@@ -1,12 +1,11 @@
 import { NextRequest } from 'next/server';
-import { Client } from 'pg'; // Використовуємо node-postgres клієнт
+import { Client } from 'pg';
 
-// ВАЖЛИВО: Використовуйте пряме підключення до БД без пулера Neon
 const DIRECT_DATABASE_URL = process.env.DATABASE_URL!;
 
-export const dynamic = 'force-dynamic'; // Обов'язково для уникнення кешування
+export const dynamic = 'force-dynamic';
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   if (!DIRECT_DATABASE_URL) {
     return new Response('DIRECT_DATABASE_URL is not set', { status: 500 });
   }
@@ -17,7 +16,6 @@ export async function GET(req: NextRequest) {
 
   try {
     await client.connect();
-    // Підписуємося на канал сповіщень
     await client.query('LISTEN db_updates_channel');
 
     const encoder = new TextEncoder();

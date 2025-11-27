@@ -21,15 +21,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       orderBy: { id: order },
       select: {
         id: true,
-        col_s_001: true,
-        col_s_002: true,
-        col_s_003: true,
-        col_n_101: true,
-        col_n_102: true,
-        col_n_103: true,
-        col_b_173: true,
-        col_b_174: true,
-        col_b_175: true,
+        col_s_01: true,
+        col_s_02: true,
+        col_s_03: true,
+        col_n_01: true,
+        col_n_02: true,
+        col_n_03: true,
+        col_b_01: true,
+        col_b_02: true,
+        col_b_03: true,
       },
     } as const;
 
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       (queryOptions as Record<string, unknown>).skip = 1;
     }
 
-    const items = await prisma.mockDataTable.findMany(queryOptions);
+    const items = await prisma.dataTable.findMany(queryOptions);
 
     const itemsOrdered = direction === 'backward' ? items.reverse() : items;
 

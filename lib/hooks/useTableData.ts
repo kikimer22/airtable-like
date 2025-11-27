@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
-import type { Cursor, MockDataRow, PaginationResponse } from '@/lib/types';
+import type { Cursor, DataTableRow, PaginationResponse } from '@/lib/types';
 import type { QueryFunctionContext, UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { TABLE_CONFIG } from '@/lib/constants';
 
-type Response = PaginationResponse<MockDataRow>;
+type Response = PaginationResponse<DataTableRow>;
 
 interface PageParam {
   cursor: Cursor;
@@ -12,7 +12,7 @@ interface PageParam {
 }
 
 export type UseTableDataResult = UseInfiniteQueryResult<InfiniteData<Response, PageParam>, Error> & {
-  flattenedData: MockDataRow[];
+  flattenedData: DataTableRow[];
   firstPageIndex: number;
   loadedPagesCount: number;
   firstPageCursor: Cursor | null;

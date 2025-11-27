@@ -6,7 +6,7 @@ import type { Cell, ColumnDef, Header, HeaderGroup, Row, Table } from '@tanstack
 import { flexRender, getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table';
 import type { VirtualItem, Virtualizer } from '@tanstack/react-virtual';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { MockDataRow } from '@/lib/types';
+import type { DataTableRow } from '@/lib/types';
 import { makeColumns } from '@/lib/helpers/columnsCreator';
 import { useTableData } from '@/lib/hooks/useTableData';
 import {
@@ -22,18 +22,24 @@ import TableSkeleton from '@/components/table/TableSkeleton';
 import { TABLE_CONFIG } from '@/lib/constants';
 import type { UseTableDataResult } from '@/lib/hooks/useTableData';
 import { useBidirectionalInfinite } from '@/lib/hooks/useBidirectionalInfinite';
+import { useOptimisticUpdates } from '@/lib/hooks/useOptimisticUpdates';
 
 export function Table() {
   const tableData = useTableData();
+  const { registerChange, isCellModified, hasChanges, cancelChanges, submitChanges } = useOptimisticUpdates();
 
-  const columns: ColumnDef<MockDataRow>[] = useMemo<ColumnDef<MockDataRow>[]>(() => makeColumns(TABLE_CONFIG.COLUMNS_LENGTH), []);
+  const columns: ColumnDef<DataTableRow>[] = useMemo<ColumnDef<DataTableRow>[]>(() =>
+      makeColumns(TABLE_CONFIG.COLUMNS_LENGTH, {
+        onRegisterChange: registerChange,
+        isModified: isCellModified,
+      }),
+    [registerChange, isCellModified]);
 
-  const table: Table<MockDataRow> = useReactTable({
+  const table: Table<DataTableRow> = useReactTable({
     data: tableData.flattenedData,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    debugTable: true,
   });
 
   if (tableData.isLoading) {
@@ -45,18 +51,44 @@ export function Table() {
     );
   }
 
-  return <TableContainer table={table} tableData={tableData}/>;
+  return (
+    <div className="flex flex-col gap-2">
+      <TableContainer
+        table={table}
+        tableData={tableData}
+      />
+      {hasChanges && (
+        <div className="flex gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded">
+          <button
+            onClick={() => submitChanges().catch(err => {
+              console.error('Submit error:', err);
+            })}
+            className="ml-auto px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+          >
+            Зберегти
+          </button>
+          <button
+            onClick={() => cancelChanges()}
+            className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+          >
+            Скасувати
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // =================================== CONTAINER ===================================
 
 interface TableContainerProps {
-  table: Table<MockDataRow>;
+  table: Table<DataTableRow>;
   tableData: UseTableDataResult;
 }
 
 function TableContainer({
-  table, tableData: {
+  table,
+  tableData: {
     hasNextPage,
     hasPreviousPage,
     isFetchingNextPage,
@@ -65,10 +97,10 @@ function TableContainer({
     fetchPreviousPage,
     flattenedData,
     loadedPagesCount,
-  }
+  },
 }: TableContainerProps) {
-  const visibleColumns = table.getVisibleLeafColumns();
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  const visibleColumns = table.getVisibleLeafColumns();
   const columnVirtualizer = useVirtualizer<HTMLDivElement, HTMLTableCellElement>({
     count: visibleColumns.length,
     estimateSize: index => visibleColumns[index].getSize(),
@@ -104,8 +136,9 @@ function TableContainer({
   return (
     <div className="container h-[785px] overflow-auto relative"
          ref={tableContainerRef}
+         id="table-container"
     >
-      <div ref={headerRef} className="h-0.25"/>
+      <div ref={headerRef} className="h-0"/>
       <UiTable>
         <TableHead
           columnVirtualizer={columnVirtualizer}
@@ -145,7 +178,7 @@ function TableContainer({
 
 interface TableHeadProps {
   columnVirtualizer: Virtualizer<HTMLDivElement, HTMLTableCellElement>;
-  table: Table<MockDataRow>;
+  table: Table<DataTableRow>;
   virtualPaddingLeft: number | undefined;
   virtualPaddingRight: number | undefined;
 }
@@ -173,7 +206,7 @@ function TableHead({
 
 interface TableHeadRowProps {
   columnVirtualizer: Virtualizer<HTMLDivElement, HTMLTableCellElement>;
-  headerGroup: HeaderGroup<MockDataRow>;
+  headerGroup: HeaderGroup<DataTableRow>;
   virtualPaddingLeft: number | undefined;
   virtualPaddingRight: number | undefined;
 }
@@ -198,7 +231,7 @@ function TableHeadRow({
 }
 
 interface TableHeadCellProps {
-  header: Header<MockDataRow, unknown>;
+  header: Header<DataTableRow, unknown>;
 }
 
 const getSortIcon = (sortState: 'asc' | 'desc' | false | null): string | null => {
@@ -249,7 +282,7 @@ function TableHeadCell({ header }: TableHeadCellProps) {
 
 interface TableBodyProps {
   columnVirtualizer: Virtualizer<HTMLDivElement, HTMLTableCellElement>;
-  table: Table<MockDataRow>;
+  table: Table<DataTableRow>;
   tableContainerRef: RefObject<HTMLDivElement | null>;
   virtualPaddingLeft: number | undefined;
   virtualPaddingRight: number | undefined;
@@ -279,7 +312,7 @@ function TableBody({
   return (
     <UiTableBody style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
       {virtualRows.map(virtualRow => {
-        const row = rows[virtualRow.index] as Row<MockDataRow>;
+        const row = rows[virtualRow.index] as Row<DataTableRow>;
         return (
           <TableBodyRow
             columnVirtualizer={columnVirtualizer}
@@ -298,7 +331,7 @@ function TableBody({
 
 interface TableBodyRowProps {
   columnVirtualizer: Virtualizer<HTMLDivElement, HTMLTableCellElement>;
-  row: Row<MockDataRow>;
+  row: Row<DataTableRow>;
   rowVirtualizer: Virtualizer<HTMLDivElement, HTMLTableRowElement>;
   virtualPaddingLeft: number | undefined;
   virtualPaddingRight: number | undefined;
@@ -336,7 +369,7 @@ function TableBodyRow({
 }
 
 interface TableBodyCellProps {
-  cell: Cell<MockDataRow, string | number | boolean>;
+  cell: Cell<DataTableRow, string | number | boolean>;
 }
 
 function TableBodyCell({ cell }: TableBodyCellProps) {

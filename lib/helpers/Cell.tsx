@@ -1,30 +1,43 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import EditableCell from '@/components/table/EditableCell';
 import DefaultCell from '@/components/table/DefaultCell';
-import type { MockDataRow } from '@/lib/types';
+import type { DataTableRow } from '@/lib/types';
 import type { TableFieldKind } from '@/lib/helpers/columnsCreator';
 
-const Cell = (kind: TableFieldKind): Partial<ColumnDef<MockDataRow>> => {
+interface CellOptions {
+  onRegisterChange?: (rowId: number, columnId: string, oldValue: unknown, newValue: unknown) => void;
+  isModified?: (rowId: number, columnId: string) => boolean;
+  onSubmit?: () => void;
+  onCancel?: () => void;
+}
+
+const Cell = (kind: TableFieldKind, options?: CellOptions): Partial<ColumnDef<DataTableRow>> => {
   return {
-    cell: ({ getValue, row: { index }, column: { id }, table }) => {
+    cell: ({ getValue, row: { index, original }, column: { id } }) => {
+      const value = getValue();
+
       if (kind === 'string' || kind === 'number' || kind === 'boolean') {
         return (
           <EditableCell
+            key={`${original.id}-${id}`}
             kind={kind}
-            value={getValue()}
-            rowIndex={index}
+            value={value}
             columnId={id}
-            table={table}
+            rowId={original.id}
+            onRegisterChange={options?.onRegisterChange}
+            isModified={options?.isModified ? options.isModified(original.id, id) : false}
+            onSubmit={options?.onSubmit}
+            onCancel={options?.onCancel}
           />
         );
       }
       return (
         <DefaultCell
+          key={`${index}-${id}`}
           kind={kind}
-          value={getValue()}
+          value={value}
           rowIndex={index}
           columnId={id}
-          table={table}
         />
       );
     },

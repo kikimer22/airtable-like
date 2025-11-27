@@ -10,7 +10,7 @@ export const toDisplayValue = (val: unknown): string => {
   return String(val);
 };
 
-export const padKey = (value: number): string => value.toString().padStart(3, '0');
+export const padKey = (value: number): string => value.toString().padStart(2, '0');
 
 export const createRange = (start: number, end: number): number[] =>
   Array.from({ length: end - start + 1 }, (_, index) => start + index);

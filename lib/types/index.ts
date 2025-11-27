@@ -1,11 +1,11 @@
-import type { MockDataTable } from '@/lib/generated/prisma/client';
+import type { DataTable } from '@/lib/generated/prisma/client';
 
-export type MockDataRow = MockDataTable;
+export type DataTableRow = DataTable;
 
 export interface DbUpdateEvent {
   table: string;
   action: 'INSERT' | 'UPDATE' | 'DELETE';
-  data: MockDataRow;
+  data: DataTableRow;
   changes?: Record<string, { old: string, new: string }>;
 }
 

@@ -1,13 +1,13 @@
 import type { ColumnDef } from '@tanstack/react-table';
-import type { MockDataRow } from '@/lib/types';
+import type { DataTableRow } from '@/lib/types';
 import Cell from '@/lib/helpers/Cell';
 import { createRange, padKey } from '@/lib/utils';
 import { TABLE_CONFIG } from '@/lib/constants';
 
 export const TABLE_COLUMN_SEGMENTS = [
-  { prefix: 'col_s_', start: 1, end: 4, kind: 'string' as const }, // 100
-  { prefix: 'col_n_', start: 101, end: 105, kind: 'number' as const }, // 172
-  { prefix: 'col_b_', start: 173, end: 178, kind: 'boolean' as const }, // 222
+  { prefix: 'col_s_', start: 1, end: 4, kind: 'string' as const }, // 11
+  { prefix: 'col_n_', start: 1, end: 4, kind: 'number' as const }, // 11
+  { prefix: 'col_b_', start: 1, end: 4, kind: 'boolean' as const }, // 11
 ] as const;
 
 const buildKeys = (): string[] => {
@@ -35,9 +35,16 @@ const getSizeForKind = (kind: TableFieldKind): number => {
   if (kind === 'number') return TABLE_CONFIG.COLUMN_WIDTHS_NUMBER;
   if (kind === 'boolean') return TABLE_CONFIG.COLUMN_WIDTHS_BOOLEAN;
   return TABLE_CONFIG.COLUMN_WIDTHS_STRING;
+};
+
+interface MakeColumnsOptions {
+  onRegisterChange?: (rowId: number, columnId: string, oldValue: unknown, newValue: unknown) => void;
+  isModified?: (rowId: number, columnId: string) => boolean;
+  onSubmit?: () => void;
+  onCancel?: () => void;
 }
 
-const buildColumns = (): ColumnDef<MockDataRow>[] => {
+const buildColumns = (options?: MakeColumnsOptions): ColumnDef<DataTableRow>[] => {
   return TABLE_FIELD_KEYS.map((field) => {
     const kind = getFieldKind(field);
     return {
@@ -46,15 +53,16 @@ const buildColumns = (): ColumnDef<MockDataRow>[] => {
       footer: (props) => props.column.id,
       size: getSizeForKind(kind),
       enableSorting: true,
-      ...Cell(kind),
+      ...Cell(kind, options),
     };
   });
 };
 
-const PREPARED_COLUMNS = buildColumns();
-
-export const makeColumns = (count: number): ColumnDef<MockDataRow>[] => {
+export const makeColumns = (count: number, options?: MakeColumnsOptions): ColumnDef<DataTableRow>[] => {
   if (count <= 0) return [];
-  if (count >= PREPARED_COLUMNS.length) return PREPARED_COLUMNS;
-  return PREPARED_COLUMNS.slice(0, count);
+
+  const columns = buildColumns(options);
+
+  if (count >= columns.length) return columns;
+  return columns.slice(0, count);
 };
