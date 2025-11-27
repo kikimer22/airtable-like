@@ -2,6 +2,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import type { MockDataRow } from '@/lib/types';
 import Cell from '@/lib/helpers/Cell';
 import { createRange, padKey } from '@/lib/utils';
+import { TABLE_CONFIG } from '@/lib/constants';
 
 export const TABLE_COLUMN_SEGMENTS = [
   { prefix: 'col_s_', start: 1, end: 4, kind: 'string' as const }, // 100
@@ -29,34 +30,23 @@ export const getFieldKind = (field: TableFieldKey): TableFieldKind => {
   return segment?.kind ?? 'string';
 };
 
-const columnWidths: Record<TableFieldKind, number> = {
-  id: 72,
-  string: 180,
-  number: 140,
-  boolean: 120,
-};
+const getSizeForKind = (kind: TableFieldKind): number => {
+  if (kind === 'id') return TABLE_CONFIG.COLUMN_WIDTHS_ID;
+  if (kind === 'number') return TABLE_CONFIG.COLUMN_WIDTHS_NUMBER;
+  if (kind === 'boolean') return TABLE_CONFIG.COLUMN_WIDTHS_BOOLEAN;
+  return TABLE_CONFIG.COLUMN_WIDTHS_STRING;
+}
 
 const buildColumns = (): ColumnDef<MockDataRow>[] => {
   return TABLE_FIELD_KEYS.map((field) => {
-    if (field === 'id') {
-      return {
-        accessorKey: field,
-        header: 'ID',
-        footer: (props) => props.column.id,
-        size: columnWidths.id,
-        enableSorting: true,
-      };
-    }
-
     const kind = getFieldKind(field);
-
     return {
       accessorKey: field,
       header: field.toUpperCase(),
       footer: (props) => props.column.id,
-      size: columnWidths[kind] ?? columnWidths.string,
+      size: getSizeForKind(kind),
       enableSorting: true,
-      ...Cell
+      ...Cell(kind),
     };
   });
 };

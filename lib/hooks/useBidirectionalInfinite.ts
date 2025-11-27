@@ -1,5 +1,6 @@
 import { type RefObject, useCallback, useEffect, useRef } from 'react';
 import { useInView } from 'react-intersection-observer';
+import { TABLE_CONFIG } from '@/lib/constants';
 
 interface UseBidirectionalInfiniteProps {
   parentRef: RefObject<HTMLDivElement | null>;
@@ -37,12 +38,12 @@ export function useBidirectionalInfinite({
   const {
     ref: footerRef,
     inView: footerInView,
-  } = useInView({ root: parentRef.current ?? null, threshold: 0.1 });
+  } = useInView({ root: parentRef.current ?? null, threshold: TABLE_CONFIG.FETCH_THRESHOLD });
 
   const {
     ref: headerRef,
     inView: headerInView,
-  } = useInView({ root: parentRef.current ?? null, threshold: 0.1 });
+  } = useInView({ root: parentRef.current ?? null, threshold: TABLE_CONFIG.FETCH_THRESHOLD });
 
   const handleNextPage = useCallback(async () => {
     if (fetchCooldownRef.current || isFetchingNextPage || isFetchingPreviousPage || !hasNextPage) return;
