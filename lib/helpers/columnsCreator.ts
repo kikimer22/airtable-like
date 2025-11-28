@@ -37,14 +37,7 @@ const getSizeForKind = (kind: TableFieldKind): number => {
   return TABLE_CONFIG.COLUMN_WIDTHS_STRING;
 };
 
-interface MakeColumnsOptions {
-  onRegisterChange?: (rowId: number, columnId: string, oldValue: unknown, newValue: unknown) => void;
-  isModified?: (rowId: number, columnId: string) => boolean;
-  onSubmit?: () => void;
-  onCancel?: () => void;
-}
-
-const buildColumns = (options?: MakeColumnsOptions): ColumnDef<DataTableRow>[] => {
+const buildColumns = (): ColumnDef<DataTableRow>[] => {
   return TABLE_FIELD_KEYS.map((field) => {
     const kind = getFieldKind(field);
     return {
@@ -53,16 +46,18 @@ const buildColumns = (options?: MakeColumnsOptions): ColumnDef<DataTableRow>[] =
       footer: (props) => props.column.id,
       size: getSizeForKind(kind),
       enableSorting: true,
-      ...Cell(kind, options),
+      ...Cell(kind),
     };
   });
 };
 
-export const makeColumns = (count: number, options?: MakeColumnsOptions): ColumnDef<DataTableRow>[] => {
+const makeColumns = (count: number): ColumnDef<DataTableRow>[] => {
   if (count <= 0) return [];
 
-  const columns = buildColumns(options);
+  const columns = buildColumns();
 
   if (count >= columns.length) return columns;
   return columns.slice(0, count);
 };
+
+export const columns: ColumnDef<DataTableRow>[] = makeColumns(TABLE_CONFIG.COLUMNS_LENGTH);

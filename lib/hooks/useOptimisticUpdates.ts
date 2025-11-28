@@ -1,78 +1,34 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { InfiniteData } from '@tanstack/react-query';
 import { getQueryClient } from '@/lib/getQueryClient';
-import type { DataTableRow, PaginationResponse, Cursor } from '@/lib/types';
-
-interface CellChange {
-  rowId: number;
-  columnId: string;
-  newValue: unknown;
-}
-
-interface OriginalValues {
-  rowId: number;
-  columnId: string;
-  value: unknown;
-}
-
-interface PageParam {
-  cursor: Cursor;
-  direction: 'forward' | 'backward';
-}
-
-type Response = PaginationResponse<DataTableRow>;
+import type { CellChange, DataTableRow, PageParam, TableResponse } from '@/lib/types';
+import { useSelectorOptimisticUpdates } from '@/lib/store/optimisticUpdatesStore';
 
 export function useOptimisticUpdates() {
   const queryClient = getQueryClient();
-  const pendingChangesRef = useRef(new Map<string, CellChange>());
-  const originalValuesRef = useRef(new Map<string, OriginalValues>());
-  const cellStatesRef = useRef(new Map<string, unknown>());
-  const [changesCount, setChangesCount] = useState(0);
+  const {
+    registerChange: storeRegisterChange,
+    getCellState,
+    setCellState,
+    clearCellState,
+    getPendingChanges,
+    isCellModified,
+    clearAll,
+    changesCount,
+  } = useSelectorOptimisticUpdates();
 
-  const registerChange = useCallback((
-    rowId: number,
-    columnId: string,
-    oldValue: unknown,
-    newValue: unknown,
-  ) => {
-    const key = `${rowId}-${columnId}`;
-
-    if (!originalValuesRef.current.has(key)) {
-      originalValuesRef.current.set(key, { rowId, columnId, value: oldValue });
-    }
-
-    if (oldValue === newValue) {
-      pendingChangesRef.current.delete(key);
-      setChangesCount(pendingChangesRef.current.size);
-      return;
-    }
-    pendingChangesRef.current.set(key, { rowId, columnId, newValue });
-    setChangesCount(pendingChangesRef.current.size);
-  }, []);
-
-  const getCellState = useCallback((rowId: number, columnId: string) => {
-    const key = `${rowId}-${columnId}`;
-    return cellStatesRef.current.get(key);
-  }, []);
-
-  const setCellState = useCallback((rowId: number, columnId: string, state: unknown) => {
-    const key = `${rowId}-${columnId}`;
-    cellStatesRef.current.set(key, state);
-  }, []);
-
-  const clearCellState = useCallback((rowId: number, columnId: string) => {
-    const key = `${rowId}-${columnId}`;
-    cellStatesRef.current.delete(key);
-  }, []);
+  const registerChange = useCallback((change: CellChange) => {
+    storeRegisterChange(change);
+  }, [storeRegisterChange]);
 
   const submitChanges = useCallback(async (): Promise<boolean> => {
-    if (pendingChangesRef.current.size === 0) {
+    const changesArray = getPendingChanges();
+
+    if (changesArray.length === 0) {
       return true;
     }
-
-    const changesArray = Array.from(pendingChangesRef.current.values());
 
     try {
       const response = await fetch('/api/table/update-cells', {
@@ -84,58 +40,49 @@ export function useOptimisticUpdates() {
       if (!response.ok) {
         const data = await response.json().catch(() => ({})) as Record<string, unknown>;
         const errorMessage = typeof data.details === 'string' ? data.details : `Server error: ${response.status}`;
-        throw new Error(errorMessage);
+        console.error('API error:', errorMessage);
+        return false;
       }
 
-      const pages = queryClient.getQueryData<InfiniteData<Response, PageParam>>(['table']);
+      const pages = queryClient.getQueryData<InfiniteData<TableResponse, PageParam>>(['table']);
       if (pages?.pages) {
+        const changesMap = new Map(changesArray.map(c => [`${c.rowId}-${c.columnId}`, c]));
         const updatedPages = pages.pages.map((page) => ({
           ...page,
           data: page.data.map((row) => {
-            const changesForRow = Array.from(pendingChangesRef.current.values())
-              .filter(c => c.rowId === row.id);
+            let hasChanges = false;
+            const updatedRow = { ...row };
 
-            if (changesForRow.length === 0) {
-              return row;
+            for (const change of changesMap.values()) {
+              if (change.rowId === row.id) {
+                updatedRow[change.columnId as keyof DataTableRow] = change.newValue as never;
+                hasChanges = true;
+              }
             }
 
-            const updatedRow = { ...row };
-            changesForRow.forEach(change => {
-              updatedRow[change.columnId as keyof DataTableRow] = change.newValue as never;
-            });
-
-            return updatedRow;
+            return hasChanges ? updatedRow : row;
           }),
         }));
 
         queryClient.setQueryData(['table'], { ...pages, pages: updatedPages });
       }
 
-      pendingChangesRef.current.clear();
-      originalValuesRef.current.clear();
-      cellStatesRef.current.clear();
-      setChangesCount(0);
-
+      clearAll();
       return true;
     } catch (error) {
+      console.error('Failed to save changes:', error);
       if (error instanceof Error) {
-        throw error;
+        return false;
       }
-      throw new Error('Failed to save changes');
+      return false;
     }
-  }, [queryClient]);
+  }, [queryClient, getPendingChanges, clearAll]);
 
   const cancelChanges = useCallback(() => {
-    pendingChangesRef.current.clear();
-    originalValuesRef.current.clear();
-    cellStatesRef.current.clear();
-    setChangesCount(0);
-  }, []);
+    clearAll();
+  }, [clearAll]);
 
-  const isCellModified = useCallback((rowId: number, columnId: string) => {
-    const key = `${rowId}-${columnId}`;
-    return pendingChangesRef.current.has(key);
-  }, []);
+  const hasChanges = useMemo(() => changesCount > 0, [changesCount]);
 
   return {
     registerChange,
@@ -145,7 +92,7 @@ export function useOptimisticUpdates() {
     getCellState,
     setCellState,
     clearCellState,
-    hasChanges: changesCount > 0,
+    hasChanges,
     changesCount,
   };
 }

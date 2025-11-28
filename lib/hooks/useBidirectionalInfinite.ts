@@ -4,32 +4,32 @@ import { TABLE_CONFIG } from '@/lib/constants';
 
 interface UseBidirectionalInfiniteProps {
   parentRef: RefObject<HTMLDivElement | null>;
+  totalDataLength: number;
   fetchNextPage: () => Promise<unknown>;
   fetchPreviousPage: () => Promise<unknown>;
   isFetchingNextPage: boolean;
   isFetchingPreviousPage: boolean;
   hasNextPage: boolean | undefined;
   hasPreviousPage: boolean | undefined;
-  rowHeight: number;
-  pageSize: number;
-  totalDataLength: number;
-  maxPages: number;
   loadedPagesCount: number;
+  rowHeight?: number;
+  pageSize?: number;
+  maxPages?: number;
 }
 
 export function useBidirectionalInfinite({
   parentRef,
+  totalDataLength,
   fetchNextPage,
   fetchPreviousPage,
   isFetchingNextPage,
   isFetchingPreviousPage,
   hasNextPage,
   hasPreviousPage,
-  rowHeight,
-  pageSize,
-  totalDataLength,
-  maxPages,
   loadedPagesCount,
+  rowHeight = TABLE_CONFIG.ROW_HEIGHT,
+  pageSize = TABLE_CONFIG.FETCH_SIZE,
+  maxPages = TABLE_CONFIG.FETCH_MAX_PAGES ?? 1,
 }: UseBidirectionalInfiniteProps) {
   const isInitialLoadRef = useRef(true);
   const lastFetchDirectionRef = useRef<'next' | 'prev' | null>(null);

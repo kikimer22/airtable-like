@@ -1,24 +1,17 @@
 import { useMemo } from 'react';
-import type { Cursor, DataTableRow, PaginationResponse } from '@/lib/types';
+import { Cursor, DataTableRow, PageParam, TableResponse } from '@/lib/types';
 import type { QueryFunctionContext, UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { TABLE_CONFIG } from '@/lib/constants';
 
-type Response = PaginationResponse<DataTableRow>;
-
-interface PageParam {
-  cursor: Cursor;
-  direction: 'forward' | 'backward';
-}
-
-export type UseTableDataResult = UseInfiniteQueryResult<InfiniteData<Response, PageParam>, Error> & {
+export type UseTableDataResult = UseInfiniteQueryResult<InfiniteData<TableResponse, PageParam>, Error> & {
   flattenedData: DataTableRow[];
   firstPageIndex: number;
   loadedPagesCount: number;
   firstPageCursor: Cursor | null;
 };
 
-const fetchData = async ({ pageParam }: QueryFunctionContext): Promise<Response> => {
+const fetchData = async ({ pageParam }: QueryFunctionContext): Promise<TableResponse> => {
   const { cursor, direction } = pageParam as PageParam;
   const params = new URLSearchParams();
   if (!!cursor) params.append('cursor', cursor.toString());
@@ -33,7 +26,7 @@ const fetchData = async ({ pageParam }: QueryFunctionContext): Promise<Response>
 };
 
 export const useTableData = (): UseTableDataResult => {
-  const infiniteQueryResult = useInfiniteQuery<Response, Error, InfiniteData<Response, PageParam>, string[], PageParam>({
+  const infiniteQueryResult = useInfiniteQuery<TableResponse, Error, InfiniteData<TableResponse, PageParam>, string[], PageParam>({
     queryKey: ['table'],
     queryFn: (p: QueryFunctionContext) => fetchData(p),
     initialPageParam: {

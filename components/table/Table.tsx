@@ -1,14 +1,12 @@
 'use client';
 
 import type { RefObject, MouseEvent, KeyboardEvent } from 'react';
-import { useMemo, useRef } from 'react';
-import type { Cell, ColumnDef, Header, HeaderGroup, Row, Table } from '@tanstack/react-table';
+import { useRef } from 'react';
+import type { Cell, Header, HeaderGroup, Row, Table } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table';
 import type { VirtualItem, Virtualizer } from '@tanstack/react-virtual';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import type { DataTableRow } from '@/lib/types';
-import { makeColumns } from '@/lib/helpers/columnsCreator';
-import { useTableData } from '@/lib/hooks/useTableData';
+import { columns } from '@/lib/helpers/columnsCreator';
 import {
   UiTable,
   UiTableBody,
@@ -21,19 +19,17 @@ import {
 import TableSkeleton from '@/components/table/TableSkeleton';
 import { TABLE_CONFIG } from '@/lib/constants';
 import type { UseTableDataResult } from '@/lib/hooks/useTableData';
-import { useBidirectionalInfinite } from '@/lib/hooks/useBidirectionalInfinite';
-import { useOptimisticUpdates } from '@/lib/hooks/useOptimisticUpdates';
+import {
+  useTableData,
+  useVirtualColumn,
+  useVirtualRow,
+  useBidirectionalInfinite,
+  useOptimisticUpdates
+} from '@/lib/hooks';
 
 export function Table() {
   const tableData = useTableData();
-  const { registerChange, isCellModified, hasChanges, cancelChanges, submitChanges } = useOptimisticUpdates();
-
-  const columns: ColumnDef<DataTableRow>[] = useMemo<ColumnDef<DataTableRow>[]>(() =>
-      makeColumns(TABLE_CONFIG.COLUMNS_LENGTH, {
-        onRegisterChange: registerChange,
-        isModified: isCellModified,
-      }),
-    [registerChange, isCellModified]);
+  const { hasChanges, cancelChanges, submitChanges } = useOptimisticUpdates();
 
   const table: Table<DataTableRow> = useReactTable({
     data: tableData.flattenedData,
@@ -65,13 +61,13 @@ export function Table() {
             })}
             className="ml-auto px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
           >
-            Зберегти
+            Save
           </button>
           <button
             onClick={() => cancelChanges()}
             className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
           >
-            Скасувати
+            Cancel
           </button>
         </div>
       )}
@@ -100,36 +96,17 @@ function TableContainer({
   },
 }: TableContainerProps) {
   const tableContainerRef = useRef<HTMLDivElement>(null);
-  const visibleColumns = table.getVisibleLeafColumns();
-  const columnVirtualizer = useVirtualizer<HTMLDivElement, HTMLTableCellElement>({
-    count: visibleColumns.length,
-    estimateSize: index => visibleColumns[index].getSize(),
-    getScrollElement: () => tableContainerRef.current,
-    overscan: TABLE_CONFIG.COLUMNS_OVERSCAN,
-    horizontal: true,
-  });
-  const virtualColumns = columnVirtualizer.getVirtualItems();
-  let virtualPaddingLeft: number | undefined;
-  let virtualPaddingRight: number | undefined;
-  if (columnVirtualizer && virtualColumns?.length) {
-    virtualPaddingLeft = virtualColumns[0]?.start ?? 0;
-    virtualPaddingRight =
-      columnVirtualizer.getTotalSize() -
-      (virtualColumns[virtualColumns.length - 1]?.end ?? 0);
-  }
+  const { columnVirtualizer, virtualPaddingLeft, virtualPaddingRight } = useVirtualColumn({ table, tableContainerRef });
 
   const { headerRef, footerRef } = useBidirectionalInfinite({
     parentRef: tableContainerRef,
+    totalDataLength: flattenedData.length,
     fetchNextPage,
     fetchPreviousPage,
     isFetchingNextPage,
     isFetchingPreviousPage,
     hasNextPage,
     hasPreviousPage,
-    rowHeight: TABLE_CONFIG.ROW_HEIGHT,
-    pageSize: TABLE_CONFIG.FETCH_SIZE,
-    totalDataLength: flattenedData.length,
-    maxPages: TABLE_CONFIG.FETCH_MAX_PAGES,
     loadedPagesCount,
   });
 
@@ -155,15 +132,15 @@ function TableContainer({
         />
         <UiTableFooter>
           <UiTableRow ref={footerRef}>
-            <UiTableCell colSpan={visibleColumns.length}>
+            <UiTableCell colSpan={9}>
               <div className={`flex items-center gap-2 min-h-9`}>
                 {isFetchingNextPage ? (
                   <>
                     <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"/>
-                    <span>Завантаження нових рядків...</span>
+                    <span>Loading new rows...</span>
                   </>
                 ) : (
-                  <span>Всі доступні рядки завантажені</span>
+                  <span>All available rows loaded</span>
                 )}
               </div>
             </UiTableCell>
@@ -295,20 +272,7 @@ function TableBody({
   virtualPaddingLeft,
   virtualPaddingRight,
 }: TableBodyProps) {
-  const { rows } = table.getRowModel();
-  const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLTableRowElement>({
-    count: rows.length,
-    estimateSize: () => TABLE_CONFIG.ROW_HEIGHT,
-    getScrollElement: () => tableContainerRef.current,
-    overscan: TABLE_CONFIG.ROWS_OVERSCAN,
-    // TODO: Enable dynamic row height measurement
-    // measureElement:
-    //   typeof window !== 'undefined' &&
-    //   navigator.userAgent.indexOf('Firefox') === -1
-    //     ? element => element?.getBoundingClientRect().height
-    //     : undefined,
-  });
-  const virtualRows = rowVirtualizer.getVirtualItems();
+  const { rows, rowVirtualizer, virtualRows } = useVirtualRow({ table, tableContainerRef });
   return (
     <UiTableBody style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
       {virtualRows.map(virtualRow => {
@@ -354,9 +318,7 @@ function TableBodyRow({
       ref={node => rowVirtualizer.measureElement(node)}
       key={row.id}
       className="absolute top-0 left-0 will-change-transform"
-      style={{
-        transform: `translateY(${virtualRow.start}px)`, //this should always be a `style` as it changes on scroll
-      }}
+      style={{ transform: `translateY(${virtualRow.start}px)` }} //this should always be a `style` as it changes on scroll
     >
       {virtualPaddingLeft ? (<UiTableCell style={{ width: virtualPaddingLeft }}/>) : null}
       {virtualColumns.map(vc => {
