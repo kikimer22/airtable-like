@@ -32,6 +32,7 @@ export function Table() {
   const tableData = useTableData();
   const { hasChanges, cancelChanges, submitChanges } = useOptimisticUpdates();
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table: Table<DataTableRow> = useReactTable({
     data: tableData.flattenedData,
     columns,
@@ -94,6 +95,8 @@ function TableContainer({
     fetchPreviousPage,
     flattenedData,
     loadedPagesCount,
+    firstPageCursor,
+    lastPageCursor,
   },
 }: TableContainerProps) {
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -109,6 +112,8 @@ function TableContainer({
     hasNextPage,
     hasPreviousPage,
     loadedPagesCount,
+    firstPageCursor,
+    lastPageCursor,
   });
 
   return (

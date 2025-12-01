@@ -1,6 +1,7 @@
-import { type RefObject, useCallback, useEffect, useRef } from 'react';
+import { type RefObject, useRef, useEffect, useEffectEvent } from 'react';
 import { useInView } from 'react-intersection-observer';
 import { TABLE_CONFIG } from '@/lib/constants';
+import type { Cursor } from '@/lib/types';
 
 interface UseBidirectionalInfiniteProps {
   parentRef: RefObject<HTMLDivElement | null>;
@@ -9,12 +10,15 @@ interface UseBidirectionalInfiniteProps {
   fetchPreviousPage: () => Promise<unknown>;
   isFetchingNextPage: boolean;
   isFetchingPreviousPage: boolean;
-  hasNextPage: boolean | undefined;
-  hasPreviousPage: boolean | undefined;
   loadedPagesCount: number;
+  hasNextPage?: boolean;
+  hasPreviousPage?: boolean;
   rowHeight?: number;
   pageSize?: number;
   maxPages?: number;
+  // cursors from useTableData to detect whether pagination meta progressed
+  firstPageCursor?: Cursor | null;
+  lastPageCursor?: Cursor | null;
 }
 
 export function useBidirectionalInfinite({
@@ -24,110 +28,98 @@ export function useBidirectionalInfinite({
   fetchPreviousPage,
   isFetchingNextPage,
   isFetchingPreviousPage,
+  loadedPagesCount,
   hasNextPage,
   hasPreviousPage,
-  loadedPagesCount,
   rowHeight = TABLE_CONFIG.ROW_HEIGHT,
   pageSize = TABLE_CONFIG.FETCH_SIZE,
   maxPages = TABLE_CONFIG.FETCH_MAX_PAGES ?? 1,
+  firstPageCursor = null,
+  lastPageCursor = null,
 }: UseBidirectionalInfiniteProps) {
-  const isInitialLoadRef = useRef(true);
-  const lastFetchDirectionRef = useRef<'next' | 'prev' | null>(null);
-  const fetchCooldownRef = useRef(false);
+  const stateRef = useRef({
+    isInitialLoad: true,
+    lastDirection: null as 'next' | 'prev' | null,
+    cooldown: false,
+  });
 
-  const {
-    ref: footerRef,
-    inView: footerInView,
-  } = useInView({ root: parentRef.current ?? null, threshold: TABLE_CONFIG.FETCH_THRESHOLD });
+  const { ref: footerRef, inView: footerInView } = useInView({
+    root: parentRef.current ?? null,
+    threshold: TABLE_CONFIG.FETCH_THRESHOLD,
+    // rootMargin: `0px 0px ${TABLE_CONFIG.FETCH_ROOT_MARGIN}px 0px`,
+  });
 
-  const {
-    ref: headerRef,
-    inView: headerInView,
-  } = useInView({ root: parentRef.current ?? null, threshold: TABLE_CONFIG.FETCH_THRESHOLD });
+  const { ref: headerRef, inView: headerInView } = useInView({
+    root: parentRef.current ?? null,
+    threshold: TABLE_CONFIG.FETCH_THRESHOLD,
+    // rootMargin: `${TABLE_CONFIG.FETCH_ROOT_MARGIN}px 0px 0px 0px`,
+  });
 
-  const handleNextPage = useCallback(async () => {
-    if (fetchCooldownRef.current || isFetchingNextPage || isFetchingPreviousPage || !hasNextPage) return;
+  const fetchPage = useEffectEvent(
+    async (direction: 'next' | 'prev') => {
+      const el = parentRef.current;
+      if (!el) return;
 
-    fetchCooldownRef.current = true;
-    lastFetchDirectionRef.current = 'next';
-    const el = parentRef.current;
+      const { cooldown } = stateRef.current;
+      if (cooldown || isFetchingNextPage || isFetchingPreviousPage) return;
 
-    try {
-      const scrollHeightBefore = el?.scrollHeight ?? 0;
+      const isNext = direction === 'next';
 
-      await fetchNextPage();
-
-      const scrollHeightAfter = el?.scrollHeight ?? 0;
-      const addedHeight = scrollHeightAfter - scrollHeightBefore;
-
-      if (loadedPagesCount >= maxPages) {
-        const removedHeight = pageSize * rowHeight;
-        const netScrollDelta = addedHeight - removedHeight;
-
-        if (netScrollDelta !== 0) {
-          el?.scrollBy({ top: netScrollDelta, behavior: 'instant' });
-        }
+      if (!isNext) {
+        if (stateRef.current.isInitialLoad) return;
+        if (loadedPagesCount <= 1 || !firstPageCursor || firstPageCursor === '1' || firstPageCursor === lastPageCursor) return;
       }
 
-    } finally {
-      lastFetchDirectionRef.current = null;
-      setTimeout(() => {
-        fetchCooldownRef.current = false;
-      }, 0);
-    }
-  }, [isFetchingNextPage, isFetchingPreviousPage, hasNextPage, fetchNextPage, parentRef, pageSize, rowHeight, maxPages, loadedPagesCount]);
+      if ((isNext && !hasNextPage) || (!isNext && !hasPreviousPage)) return;
 
-  const handlePreviousPage = useCallback(async () => {
-    if (fetchCooldownRef.current || isFetchingPreviousPage || isFetchingNextPage || !hasPreviousPage) return;
+      stateRef.current.cooldown = true;
+      stateRef.current.lastDirection = direction;
 
-    fetchCooldownRef.current = true;
-    lastFetchDirectionRef.current = 'prev';
-    const el = parentRef.current;
+      try {
+        const scrollTopBefore = el.scrollTop ?? 0;
+        const scrollHeightBefore = el.scrollHeight ?? 0;
 
-    try {
-      const scrollTopBefore = el?.scrollTop ?? 0;
-      const scrollHeightBefore = el?.scrollHeight ?? 0;
+        await (isNext ? fetchNextPage() : fetchPreviousPage());
 
-      await fetchPreviousPage();
-
-      const scrollHeightAfter = el?.scrollHeight ?? 0;
-      const addedHeight = scrollHeightAfter - scrollHeightBefore;
-
-      if (loadedPagesCount < maxPages) {
+        const scrollHeightAfter = el.scrollHeight ?? 0;
+        const addedHeight = scrollHeightAfter - scrollHeightBefore;
         const removedHeight = pageSize * rowHeight;
-        const netScrollDelta = addedHeight - removedHeight;
-        if (el && el.scrollTop !== undefined) {
-          el.scrollTop = scrollTopBefore + netScrollDelta;
+
+        if (isNext) {
+          if (loadedPagesCount >= maxPages) {
+            el.scrollBy({ top: addedHeight - removedHeight, behavior: 'instant' });
+          }
+        } else {
+          if (loadedPagesCount < maxPages) {
+            el.scrollTop = scrollTopBefore + (addedHeight - removedHeight);
+          } else {
+            el.scrollTop = scrollTopBefore + addedHeight;
+            el.scrollBy({ top: removedHeight, behavior: 'instant' });
+          }
         }
-      } else {
-        if (el && el.scrollTop !== undefined) {
-          el.scrollTop = scrollTopBefore + addedHeight;
-        }
-        const removedHeight = pageSize * rowHeight;
-        el?.scrollBy({ top: removedHeight, behavior: 'instant' });
+      } finally {
+        stateRef.current.lastDirection = null;
+        queueMicrotask(() => {
+          stateRef.current.cooldown = false;
+        });
       }
-
-    } finally {
-      lastFetchDirectionRef.current = null;
-      setTimeout(() => {
-        fetchCooldownRef.current = false;
-      }, 0);
     }
-  }, [isFetchingPreviousPage, isFetchingNextPage, hasPreviousPage, fetchPreviousPage, parentRef, pageSize, rowHeight, maxPages, loadedPagesCount]);
+  );
 
   useEffect(() => {
-    if (!footerInView || isInitialLoadRef.current || isFetchingNextPage || isFetchingPreviousPage) return;
-    void handleNextPage();
-  }, [footerInView, handleNextPage, isFetchingNextPage, isFetchingPreviousPage]);
+    if (!footerInView || stateRef.current.isInitialLoad) return;
+    void fetchPage('next');
+  }, [footerInView]);
 
   useEffect(() => {
-    if (!headerInView || isInitialLoadRef.current || isFetchingPreviousPage || isFetchingNextPage) return;
-    void handlePreviousPage();
-  }, [headerInView, handlePreviousPage, isFetchingPreviousPage, isFetchingNextPage]);
+    if (!headerInView || stateRef.current.isInitialLoad) return;
+    void fetchPage('prev');
+  }, [headerInView]);
 
   useEffect(() => {
-    if (totalDataLength === 0) return;
-    isInitialLoadRef.current = false;
+    if (totalDataLength > 0) {
+      stateRef.current.isInitialLoad = false;
+    }
   }, [totalDataLength]);
 
   return { headerRef, footerRef };

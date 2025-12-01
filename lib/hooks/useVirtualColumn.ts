@@ -11,6 +11,7 @@ interface UseVirtualColumnProps {
 
 export const useVirtualColumn = ({ table, tableContainerRef }: UseVirtualColumnProps) => {
   const visibleColumns = table.getVisibleLeafColumns();
+  // eslint-disable-next-line react-hooks/incompatible-library
   const columnVirtualizer = useVirtualizer<HTMLDivElement, HTMLTableCellElement>({
     count: visibleColumns.length,
     estimateSize: index => visibleColumns[index].getSize(),

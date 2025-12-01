@@ -1,68 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { TABLE_CONFIG, TABLE_SELECT_FIELDS } from '@/lib/constants';
-import { decodeCursor, encodeCursor } from '@/lib/utils';
-import { PaginationResponse } from '@/lib/types';
+import { TABLE_SELECT_FIELDS } from '@/lib/constants';
+import { DataTableRow, PaginationResponse } from '@/lib/types';
 import { error } from '@/lib/logger';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  const { searchParams } = new URL(request.url);
+
+  const cursor = searchParams.get('cursor');
+  const take = parseInt(searchParams.get('limit') ?? '10', 10);
+  const direction = searchParams.get('direction') ?? 'forward';
+
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const cursor = searchParams.get('cursor'); // base64 or null
-    const direction = (searchParams.get('direction') ?? 'forward') as 'forward' | 'backward';
+    let rows = [];
 
-    const pageSize = TABLE_CONFIG.FETCH_SIZE;
-
-    const take = pageSize + 1;
-
-    const order = direction === 'forward' ? 'asc' : 'desc';
-
-    const queryOptions = {
-      take,
-      orderBy: { id: order },
-      select: TABLE_SELECT_FIELDS,
-    } as const;
-
-    if (cursor) {
-      (queryOptions as Record<string, unknown>).cursor = { id: decodeCursor(cursor) };
-      (queryOptions as Record<string, unknown>).skip = 1;
+    if (direction === 'forward') {
+      rows = await prisma.dataTable.findMany({
+        take,
+        orderBy: { id: 'asc' },
+        ...(cursor ? { cursor: { id: Number(cursor) }, skip: 1 } : {}),
+        select: TABLE_SELECT_FIELDS,
+      }) as DataTableRow[];
+    } else {   // backward
+      rows = await prisma.dataTable.findMany({
+        take,
+        orderBy: { id: 'desc' },
+        ...(cursor ? { cursor: { id: Number(cursor) }, skip: 1 } : {}),
+        select: TABLE_SELECT_FIELDS,
+      }) as DataTableRow[];
+      rows = rows.reverse();
     }
 
-    const items = await prisma.dataTable.findMany(queryOptions);
+    const nextCursor =
+      rows.length > 0 ? String(rows[rows.length - 1].id) : null;
+    const prevCursor =
+      rows.length > 0 ? String(rows[0].id) : null;
 
-    const itemsOrdered = direction === 'backward' ? items.reverse() : items;
-
-    const hasExtra = items.length > pageSize;
-    const data = hasExtra ? itemsOrdered.slice(0, pageSize) : itemsOrdered;
-
-    let nextCursor: string | null = null;
-    let prevCursor: string | null = null;
-    let hasNextPage = false;
-    let hasPrevPage = false;
-
-    if (data.length > 0) {
-      if (direction === 'forward') {
-        nextCursor = hasExtra ? encodeCursor(data[data.length - 1]!.id) : null;
-        prevCursor = cursor ? encodeCursor(data[0]!.id) : null;
-        hasNextPage = hasExtra;
-        hasPrevPage = !!cursor;
-      } else {
-        // direction === 'backward'
-        prevCursor = hasExtra ? encodeCursor(data[0]!.id) : null;
-        nextCursor = cursor ? encodeCursor(data[data.length - 1]!.id) : null;
-        hasPrevPage = hasExtra;
-        hasNextPage = !!cursor;
-      }
-    }
-
-    return NextResponse.json<PaginationResponse<typeof data[0]>>({
-      data,
+    return NextResponse.json<PaginationResponse<typeof rows[0]>>({
+      data: rows,
       meta: {
         nextCursor,
         prevCursor,
-        hasNextPage,
-        hasPrevPage,
-        pageSize,
       },
     });
   } catch (err) {

@@ -11,6 +11,7 @@ interface UseVirtualRowProps {
 
 export const useVirtualRow = ({ table, tableContainerRef }: UseVirtualRowProps) => {
   const { rows } = table.getRowModel();
+  // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLTableRowElement>({
     count: rows.length,
     estimateSize: () => TABLE_CONFIG.ROW_HEIGHT,

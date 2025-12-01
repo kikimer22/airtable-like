@@ -62,16 +62,13 @@ export const useSSEListener = ({
         onDisconnect?.();
         const delay = Math.min(1000 * Math.pow(2, 3), 30000);
          
-        reconnectTimeoutRef.current = window.setTimeout(reconnect, delay) as unknown as number;
+        // eslint-disable-next-line react-hooks/immutability
+        reconnectTimeoutRef.current = window.setTimeout(() => connect(), delay) as unknown as number;
       });
     } catch (err) {
       onError?.(err instanceof Error ? err : new Error('SSE connect failed'));
     }
   }, [onMessage, onError, onConnect, onDisconnect]);
-
-  const reconnect = useCallback(() => {
-    connect();
-  }, [connect]);
 
   const disconnect = useCallback(() => {
     isManuallyClosedRef.current = true;

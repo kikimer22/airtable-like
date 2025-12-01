@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
-import type { InfiniteData, UseInfiniteQueryResult } from '@tanstack/react-query';
+import { useCallback } from 'react';
+import type { InfiniteData } from '@tanstack/react-query';
 import { getQueryClient } from '@/lib/getQueryClient';
 import type { CellChange, DataTableRow, PageParam, TableResponse } from '@/lib/types';
 import { useSelectorOptimisticUpdates } from '@/lib/store/optimisticUpdatesStore';
-import { error, warn } from '@/lib/logger';
+import { error } from '@/lib/logger';
 
 export function useOptimisticUpdates() {
   const queryClient = getQueryClient();
@@ -23,8 +23,8 @@ export function useOptimisticUpdates() {
   const registerChange = useCallback((change: CellChange) => {
     storeRegisterChange(change);
 
-    queryClient.setQueryData<InfiniteData<TableResponse, PageParam> | undefined>(['table'], (pages) => {
-      if (!pages?.pages) return pages as InfiniteData<TableResponse, PageParam> | undefined;
+    queryClient.setQueryData<InfiniteData<TableResponse, PageParam>>(['table'], (pages) => {
+      if (!pages?.pages) return pages;
 
       const updatedPages = pages.pages.map((page) => {
         let changed = false;
@@ -36,7 +36,7 @@ export function useOptimisticUpdates() {
         return changed ? { ...page, data } : page;
       });
 
-      return { ...pages, pages: updatedPages } as InfiniteData<TableResponse, PageParam>;
+      return { ...pages, pages: updatedPages };
     });
   }, [queryClient, storeRegisterChange]);
 
@@ -59,16 +59,13 @@ export function useOptimisticUpdates() {
       }
 
       const pages = queryClient.getQueryData<InfiniteData<TableResponse, PageParam>>(['table']);
-      const changedRowIds = new Set<number>(changesArray.map((c) => c.rowId));
-      const hadCache = !!pages?.pages && pages.pages.some((page) => page.data.some((r) => changedRowIds.has(r.id)));
-
       if (pages?.pages) {
         const changesMap = new Map(changesArray.map((c) => [`${c.rowId}-${c.columnId}`, c]));
         const updatedPages = pages.pages.map((page) => ({
           ...page,
           data: page.data.map((row) => {
-            let mutated = false;
             const updatedRow = { ...row } as DataTableRow;
+            let mutated = false;
             for (const change of changesMap.values()) {
               if (change.rowId === row.id) {
                 updatedRow[change.columnId as keyof DataTableRow] = change.newValue as never;
@@ -83,14 +80,6 @@ export function useOptimisticUpdates() {
 
       clearAll();
 
-      if (hadCache) {
-        try {
-          await queryClient.invalidateQueries({ queryKey: ['table'] });
-        } catch {
-          warn('revalidate table failed');
-        }
-      }
-
       return true;
     } catch (err) {
       error('save failed', err);
@@ -99,14 +88,10 @@ export function useOptimisticUpdates() {
   }, [getPendingChanges, queryClient, clearAll]);
 
   const cancelChanges = useCallback(() => {
-    const pages = queryClient.getQueryData<UseInfiniteQueryResult<InfiniteData<TableResponse, PageParam>, Error>>(['table']);
     clearAll();
-    if (pages) {
-      void queryClient.invalidateQueries({ queryKey: ['table'] });
-    }
-  }, [queryClient, clearAll]);
+  }, [clearAll]);
 
-  const hasChanges = useMemo(() => changesCount > 0, [changesCount]);
+  const hasChanges = changesCount > 0;
 
   return {
     registerChange,

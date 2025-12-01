@@ -38,9 +38,6 @@ export type TableResponse = PaginationResponse<DataTableRow>;
 export interface PaginationMeta {
   nextCursor: Cursor;
   prevCursor: Cursor;
-  hasNextPage: boolean;
-  hasPrevPage: boolean;
-  pageSize: number;
 }
 
 export interface PaginationResponse<T> {

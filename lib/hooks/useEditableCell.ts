@@ -42,7 +42,6 @@ export function useEditableCell({ rowId, columnId, value }: UseEditableCellProps
 
   const persistOnUnmount = useEffectEvent(() => {
     if (!isModified) return;
-
     if (internalValue !== value) {
       setCellState({ rowId, columnId, value: internalValue });
     } else {
@@ -51,9 +50,10 @@ export function useEditableCell({ rowId, columnId, value }: UseEditableCellProps
   });
 
   useEffect(() => {
-    if (!isCancelled) return;
-    resetOnCancel();
+    if (isCancelled) resetOnCancel();
   }, [isCancelled]);
+
+  useEffect(() => persistOnUnmount, []);
 
   useEffect(() => {
     return () => persistOnUnmount();
