@@ -11,44 +11,27 @@ export type UseTableDataResult = UseInfiniteQueryResult<InfiniteData<TableRespon
   firstPageCursor: Cursor | null;
 };
 
+export const TABLE_QUERY_KEY = ['table'] as const;
+
 const fetchData = async ({ pageParam }: QueryFunctionContext): Promise<TableResponse> => {
   const { cursor, direction } = pageParam as PageParam;
   const params = new URLSearchParams();
-  if (!!cursor) params.append('cursor', cursor.toString());
-  params.append('direction', direction.toString());
+  if (cursor) params.append('cursor', cursor.toString());
+  params.append('direction', direction);
   params.append('pageSize', TABLE_CONFIG.FETCH_SIZE.toString());
 
   const response = await fetch(`/api/table?${params}`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch data: ${response.status}`);
-  }
+  if (!response.ok) throw new Error(`Failed to fetch table: ${response.status}`);
   return response.json();
 };
 
 export const useTableData = (): UseTableDataResult => {
-  const infiniteQueryResult = useInfiniteQuery<TableResponse, Error, InfiniteData<TableResponse, PageParam>, string[], PageParam>({
-    queryKey: ['table'],
-    queryFn: (p: QueryFunctionContext) => fetchData(p),
-    initialPageParam: {
-      cursor: null,
-      direction: 'forward',
-    },
-    getNextPageParam: (lastPage) => {
-      if (!lastPage.meta.hasNextPage) return null;
-      return {
-        cursor: lastPage.meta.nextCursor,
-        direction: 'forward',
-      };
-    },
-    getPreviousPageParam: (firstPage) => {
-      if (!firstPage?.meta?.hasPrevPage) return null;
-      const prevCursor = firstPage.meta.prevCursor;
-      if (prevCursor == null) return null;
-      return {
-        cursor: prevCursor,
-        direction: 'backward',
-      };
-    },
+  const infiniteQueryResult = useInfiniteQuery<TableResponse, Error, InfiniteData<TableResponse, PageParam>, typeof TABLE_QUERY_KEY, PageParam>({
+    queryKey: TABLE_QUERY_KEY,
+    queryFn: fetchData,
+    initialPageParam: { cursor: null, direction: 'forward' },
+    getNextPageParam: (lastPage) => lastPage.meta.hasNextPage ? { cursor: lastPage.meta.nextCursor, direction: 'forward' } : null,
+    getPreviousPageParam: (firstPage) => firstPage?.meta?.hasPrevPage && firstPage?.meta?.prevCursor ? { cursor: firstPage.meta.prevCursor, direction: 'backward' } : null,
     maxPages: TABLE_CONFIG.FETCH_MAX_PAGES,
   });
 
@@ -68,19 +51,8 @@ export const useTableData = (): UseTableDataResult => {
 
     const data = visiblePages.flatMap((page) => page.data);
 
-    return {
-      flattenedData: data,
-      firstPageIndex: firstIdx,
-      loadedPagesCount: pagesCount,
-      firstPageCursor
-    };
+    return { flattenedData: data, firstPageIndex: firstIdx, loadedPagesCount: pagesCount, firstPageCursor };
   }, [infiniteQueryResult?.data?.pages]);
 
-  return {
-    ...infiniteQueryResult,
-    flattenedData,
-    firstPageIndex,
-    loadedPagesCount,
-    firstPageCursor
-  };
+  return { ...infiniteQueryResult, flattenedData, firstPageIndex, loadedPagesCount, firstPageCursor };
 };

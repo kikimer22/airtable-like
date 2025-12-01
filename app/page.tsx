@@ -4,8 +4,8 @@ import { NotificationDashboard } from '@/components/table/NotificationDashboard'
 export default function Home() {
   return (
     <main className="w-full min-h-screen flex flex-col gap-4 p-4">
-      <NotificationDashboard/>
       <Table/>
+      <NotificationDashboard/>
     </main>
   );
 }

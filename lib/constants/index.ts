@@ -1,3 +1,26 @@
+export const TABLE_SELECT_FIELDS = {
+  id: true,
+  col_s_01: true,
+  col_s_02: true,
+  col_s_03: true,
+  col_n_01: true,
+  col_n_02: true,
+  col_n_03: true,
+  col_b_01: true,
+  col_b_02: true,
+  col_b_03: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+export const TABLE_ALLOWED_FIELDS = new Set([
+  'id',
+  'col_s_01', 'col_s_02', 'col_s_03',
+  'col_n_01', 'col_n_02', 'col_n_03',
+  'col_b_01', 'col_b_02', 'col_b_03',
+  'createdAt', 'updatedAt',
+]) as ReadonlySet<string>;
+
 export const TABLE_CONFIG = {
   FETCH_SIZE: 50,
   FETCH_THRESHOLD: 0.1,

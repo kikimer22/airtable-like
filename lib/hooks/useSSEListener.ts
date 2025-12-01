@@ -1,10 +1,8 @@
 'use client';
 
 import { useRef, useCallback } from 'react';
-import { DataTableRow, PageParam, SSENotification, TableResponse } from '@/lib/types';
+import type { SSENotification } from '@/lib/types';
 import { debug, warn, error } from '@/lib/logger';
-import { getQueryClient } from '@/lib/getQueryClient';
-import { InfiniteData } from '@tanstack/react-query';
 
 interface UseSSEListenerOptions {
   onMessage: (notification: SSENotification) => void;
@@ -27,7 +25,7 @@ export const useSSEListener = ({
   const connect = useCallback(() => {
     if (eventSourceRef.current) return;
     if (!('EventSource' in window)) {
-      const err = new Error('EventSource is not supported');
+      const err = new Error('EventSource not supported');
       onError?.(err);
       return;
     }
@@ -38,80 +36,52 @@ export const useSSEListener = ({
       eventSourceRef.current = es;
 
       es.addEventListener('open', () => {
-        debug('SSE connected', 'sse');
+        debug('connected', 'sse');
         onConnect?.();
       });
 
       es.addEventListener('message', (event) => {
         try {
           if (event.data.startsWith(':')) return;
-
           const notification: SSENotification = JSON.parse(event.data);
-
-          const key = `${notification.tableName}-${notification.logId.toString()}`;
-          if (lastSeenRef.current.has(key)) return;
-          lastSeenRef.current.add(key);
-
+          const dedupeKey = `${notification.tableName}-${notification.logId.toString()}`;
+          if (lastSeenRef.current.has(dedupeKey)) return;
+          lastSeenRef.current.add(dedupeKey);
           onMessage(notification);
-
-          const queryClient = getQueryClient();
-          const pages = queryClient.getQueryData<InfiniteData<TableResponse, PageParam>>(['table']);
-          if (!pages?.pages) return;
-
-          const changedId = notification.payload.id;
-          const affected = pages.pages.some((p: TableResponse) => p.data.some((r: DataTableRow) => r.id === changedId));
-          if (!affected) return;
-
-          queryClient.setQueryData(['table'], (old: InfiniteData<TableResponse, PageParam>) => {
-            if (!old?.pages) return old;
-            const updatedPages = old.pages.map((page: TableResponse) => ({
-              ...page,
-              data: page.data.map((row: DataTableRow) => (row.id === changedId ? { ...row, ...notification.payload.data } : row)),
-            }));
-            return { ...old, pages: updatedPages };
-          });
-
-          debug({ table: notification.tableName, id: changedId }, 'sse-merge');
         } catch (err) {
-          error('SSE parse/merge error', err);
-          onError?.(err instanceof Error ? err : new Error('SSE parse failed'));
+          error('SSE parse failed', err);
+          onError?.(err instanceof Error ? err : new Error('SSE parse'));
         }
       });
 
       es.addEventListener('error', () => {
         if (isManuallyClosedRef.current) return;
-
-        warn('SSE error, attempting reconnect', 'sse');
+        warn('SSE error', 'sse');
         es.close();
         eventSourceRef.current = null;
         onDisconnect?.();
-
         const delay = Math.min(1000 * Math.pow(2, 3), 30000);
-        // window.setTimeout returns number
-        reconnectTimeoutRef.current = window.setTimeout(connect, delay) as unknown as number;
+         
+        reconnectTimeoutRef.current = window.setTimeout(reconnect, delay) as unknown as number;
       });
     } catch (err) {
-      onError?.(err instanceof Error ? err : new Error('Connection failed'));
+      onError?.(err instanceof Error ? err : new Error('SSE connect failed'));
     }
   }, [onMessage, onError, onConnect, onDisconnect]);
 
+  const reconnect = useCallback(() => {
+    connect();
+  }, [connect]);
+
   const disconnect = useCallback(() => {
     isManuallyClosedRef.current = true;
-
-    if (reconnectTimeoutRef.current) {
-      window.clearTimeout(reconnectTimeoutRef.current as number);
-    }
-
+    if (reconnectTimeoutRef.current) window.clearTimeout(reconnectTimeoutRef.current);
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
-
     onDisconnect?.();
   }, [onDisconnect]);
 
-  return {
-    disconnect,
-    connect,
-  };
+  return { disconnect, connect };
 };

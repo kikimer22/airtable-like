@@ -1,19 +1,33 @@
 'use client';
 
-import { useState, useCallback, type FC, useEffect, useEffectEvent } from 'react';
+import { useState, useCallback, type FC, useEffect, useMemo, useEffectEvent } from 'react';
 import { useSSEListener } from '@/lib/hooks/useSSEListener';
+import { useSSECacheSync } from '@/lib/hooks/useSSECacheSync';
 import type { SSENotification, FieldChange } from '@/lib/types';
 import { debug, error as logError } from '@/lib/logger';
+import { useOptimisticUpdates } from '@/lib/hooks';
 
 export const NotificationDashboard: FC = () => {
   const [notifications, setNotifications] = useState<SSENotification[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { getPendingChanges } = useOptimisticUpdates();
 
-  const handleMessage = useCallback((notification: SSENotification) => {
-    debug(notification, 'notification-received');
-    setNotifications((prev) => [notification, ...prev].slice(0, 50));
-  }, []);
+  const locallyModifiedRowIds = useMemo(() => {
+    const changes = getPendingChanges();
+    return new Set<number>(changes.map((c: { rowId: number }) => c.rowId));
+  }, [getPendingChanges]);
+
+  const syncSSEToCache = useSSECacheSync({ locallyModifiedRowIds });
+
+  const handleMessage = useCallback(
+    (notification: SSENotification) => {
+      debug(notification, 'notification-received');
+      syncSSEToCache(notification);
+      setNotifications((prev) => [notification, ...prev].slice(0, 50));
+    },
+    [syncSSEToCache]
+  );
 
   const handleError = useCallback((err: Error) => {
     logError(err.message);

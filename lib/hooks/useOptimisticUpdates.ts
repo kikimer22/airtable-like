@@ -116,6 +116,7 @@ export function useOptimisticUpdates() {
     getCellState,
     setCellState,
     clearCellState,
+    getPendingChanges,
     hasChanges,
     changesCount,
   };

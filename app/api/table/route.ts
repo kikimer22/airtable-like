@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { TABLE_CONFIG } from '@/lib/constants';
+import { TABLE_CONFIG, TABLE_SELECT_FIELDS } from '@/lib/constants';
 import { decodeCursor, encodeCursor } from '@/lib/utils';
 import { PaginationResponse } from '@/lib/types';
 import { error } from '@/lib/logger';
@@ -20,18 +20,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const queryOptions = {
       take,
       orderBy: { id: order },
-      select: {
-        id: true,
-        col_s_01: true,
-        col_s_02: true,
-        col_s_03: true,
-        col_n_01: true,
-        col_n_02: true,
-        col_n_03: true,
-        col_b_01: true,
-        col_b_02: true,
-        col_b_03: true,
-      },
+      select: TABLE_SELECT_FIELDS,
     } as const;
 
     if (cursor) {

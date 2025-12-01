@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useEffectEvent } from 'react';
+import { useState, useEffect, useCallback, useEffectEvent, useMemo } from 'react';
 import { useSelectorEditableCell } from '@/lib/store/optimisticUpdatesStore';
 
 interface UseEditableCellProps {
@@ -58,6 +58,15 @@ export function useEditableCell({ rowId, columnId, value }: UseEditableCellProps
   useEffect(() => {
     return () => persistOnUnmount();
   }, []);
+
+  const syncedValue = useMemo(() => {
+    if (isModified) return internalValue;
+    return value;
+  }, [value, isModified, internalValue]);
+
+  useEffect(() => {
+    setInternalValue(syncedValue);
+  }, [syncedValue]);
 
   return {
     isModified,
