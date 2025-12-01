@@ -21,66 +21,89 @@ export function useOptimisticUpdates() {
 
   const registerChange = useCallback((change: CellChange) => {
     storeRegisterChange(change);
-  }, [storeRegisterChange]);
+
+    queryClient.setQueryData<InfiniteData<TableResponse, PageParam> | undefined>(['table'], (pages) => {
+      if (!pages?.pages) return pages as InfiniteData<TableResponse, PageParam> | undefined;
+
+      const updatedPages = pages.pages.map((page) => {
+        let changed = false;
+        const data = page.data.map((row) => {
+          if (row.id !== change.rowId) return row;
+          changed = true;
+          return { ...row, [change.columnId as keyof DataTableRow]: change.newValue } as DataTableRow;
+        });
+        return changed ? { ...page, data } : page;
+      });
+
+      return { ...pages, pages: updatedPages } as InfiniteData<TableResponse, PageParam>;
+    });
+  }, [queryClient, storeRegisterChange]);
 
   const submitChanges = useCallback(async (): Promise<boolean> => {
     const changesArray = getPendingChanges();
-
-    if (changesArray.length === 0) {
-      return true;
-    }
+    if (changesArray.length === 0) return true;
 
     try {
-      const response = await fetch('/api/table/update-cells', {
+      const res = await fetch('/api/table/update-cells', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updates: changesArray }),
       });
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({})) as Record<string, unknown>;
-        const errorMessage = typeof data.details === 'string' ? data.details : `Server error: ${response.status}`;
-        console.error('API error:', errorMessage);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as Record<string, unknown>;
+        const details = typeof data.details === 'string' ? data.details : `Server error: ${res.status}`;
+        console.error('update-cells failed:', details);
         return false;
       }
 
       const pages = queryClient.getQueryData<InfiniteData<TableResponse, PageParam>>(['table']);
+      const changedRowIds = new Set<number>(changesArray.map((c) => c.rowId));
+      const hadCache = !!pages?.pages && pages.pages.some((page) => page.data.some((r) => changedRowIds.has(r.id)));
+
       if (pages?.pages) {
-        const changesMap = new Map(changesArray.map(c => [`${c.rowId}-${c.columnId}`, c]));
+        const changesMap = new Map(changesArray.map((c) => [`${c.rowId}-${c.columnId}`, c]));
         const updatedPages = pages.pages.map((page) => ({
           ...page,
           data: page.data.map((row) => {
-            let hasChanges = false;
-            const updatedRow = { ...row };
-
+            let mutated = false;
+            const updatedRow = { ...row } as DataTableRow;
             for (const change of changesMap.values()) {
               if (change.rowId === row.id) {
                 updatedRow[change.columnId as keyof DataTableRow] = change.newValue as never;
-                hasChanges = true;
+                mutated = true;
               }
             }
-
-            return hasChanges ? updatedRow : row;
+            return mutated ? updatedRow : row;
           }),
         }));
-
         queryClient.setQueryData(['table'], { ...pages, pages: updatedPages });
       }
 
       clearAll();
-      return true;
-    } catch (error) {
-      console.error('Failed to save changes:', error);
-      if (error instanceof Error) {
-        return false;
+
+      if (hadCache) {
+        try {
+          await queryClient.invalidateQueries({ queryKey: ['table'] });
+        } catch {
+          console.warn('revalidate table failed');
+        }
       }
+
+      return true;
+    } catch (err) {
+      console.error('save failed', err);
       return false;
     }
-  }, [queryClient, getPendingChanges, clearAll]);
+  }, [getPendingChanges, queryClient, clearAll]);
 
   const cancelChanges = useCallback(() => {
+    const pages = queryClient.getQueryData(['table']);
     clearAll();
-  }, [clearAll]);
+    if (pages) {
+      void queryClient.invalidateQueries({ queryKey: ['table'] });
+    }
+  }, [queryClient, clearAll]);
 
   const hasChanges = useMemo(() => changesCount > 0, [changesCount]);
 
@@ -96,4 +119,3 @@ export function useOptimisticUpdates() {
     changesCount,
   };
 }
-

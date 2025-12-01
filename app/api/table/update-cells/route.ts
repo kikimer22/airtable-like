@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { clients } from '@/lib/services/pgListener.service';
 
 interface CellUpdate {
   rowId: number;
@@ -25,7 +26,6 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'No updates provided' }, { status: 400 });
     }
 
-    // Групуємо оновлення за rowId для мінімізації запитів до БД
     const updatesByRowId = new Map<number, Record<string, unknown>>();
 
     for (const update of updates) {
@@ -39,13 +39,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         }, { status: 400 });
       }
 
-      // Валідація columnId - повинен починатися з col_
       if (!columnId.startsWith('col_')) {
         console.warn(`[UPDATE-CELLS] Skipping invalid column: ${columnId}`);
         continue;
       }
 
-      // Накопичуємо всі оновлення для кожного рядку
       if (!updatesByRowId.has(rowId)) {
         updatesByRowId.set(rowId, {});
       }
@@ -55,7 +53,6 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
     console.log('[UPDATE-CELLS] Updates by row:', JSON.stringify(Array.from(updatesByRowId.entries()), null, 2));
 
-    // Виконуємо оновлення в БД
     const results = [];
     for (const [rowId, updateData] of updatesByRowId) {
       try {
@@ -72,8 +69,40 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         });
 
         if (result.count > 0) {
-          results.push({ rowId, success: true, columnsUpdated: Object.keys(updateData).length });
+          results.push({ rowId, success: true });
           console.log(`[UPDATE-CELLS] Successfully updated row ${rowId}`);
+
+          try {
+            const logs = await prisma.$queryRaw<Array<{ id: bigint }>>`
+                SELECT id
+                FROM notification_logs_table
+                WHERE table_name = ${'data_table'}
+                  AND (payload ->>'id')::int = ${rowId}
+                ORDER BY "createdAt" DESC
+                    LIMIT 1
+            `;
+
+            const logId = Array.isArray(logs) && logs[0] && logs[0].id ? String(logs[0].id) : null;
+            if (logId) {
+              console.log('[UPDATE-CELLS] Fallback: found notification log id', logId);
+              let written = 0;
+              // Broadcast log id to all connected SSE writers
+              for (const writer of clients) {
+                try {
+                  // writer expects a string payload; the notifications route will
+                  // fetch full payload by log id and format SSE for clients.
+                  await writer.write(logId);
+                  written++;
+                } catch (err) {
+                  // swallow individual writer errors; pgListener will clean up dead writers
+                }
+              }
+              console.log(`[UPDATE-CELLS] Fallback: broadcast attempted to ${written} writers`);
+            }
+          } catch (fallbackErr) {
+            console.warn('[UPDATE-CELLS] Fallback broadcast failed:', fallbackErr);
+          }
+
         } else {
           console.warn(`[UPDATE-CELLS] Row ${rowId} not found`);
           results.push({ rowId, success: false, reason: 'Row not found' });
@@ -101,5 +130,3 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     );
   }
 }
-
-

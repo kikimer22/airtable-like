@@ -2,11 +2,28 @@ import type { DataTable } from '@/lib/generated/prisma/client';
 
 export type DataTableRow = DataTable;
 
-export interface DbUpdateEvent {
+export type ChangeAction = 'INSERT' | 'UPDATE' | 'DELETE';
+
+export interface FieldChange {
+  old: unknown;
+  new: unknown;
+}
+
+export interface NotificationPayload {
+  id: number;
   table: string;
-  action: 'INSERT' | 'UPDATE' | 'DELETE';
-  data: DataTableRow;
-  changes?: Record<string, { old: string, new: string }>;
+  action: ChangeAction;
+  timestamp: string;
+  data: Record<string, unknown>;
+  changes: Record<string, FieldChange>;
+}
+
+export interface SSENotification {
+  logId: bigint;
+  tableName: string;
+  action: ChangeAction;
+  payload: NotificationPayload;
+  createdAt: Date;
 }
 
 export type Cursor = string | null;

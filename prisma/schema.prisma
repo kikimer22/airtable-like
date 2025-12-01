@@ -1,66 +1,76 @@
-// This is your Prisma schemas file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// schema.prisma
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+datasource db {
+  provider = "postgresql"
+}
 
 generator client {
   provider = "prisma-client"
   output   = "../lib/generated/prisma"
 }
 
-datasource db {
-  provider = "postgresql"
+// ============================================================================
+// Таблиця логів уведомлень
+// ============================================================================
+model NotificationLog {
+  id        BigInt   @id @default(autoincrement())
+  tableName String   @map("table_name") @db.VarChar(255)
+  action    String   @db.VarChar(10) // INSERT, UPDATE, DELETE
+  payload   Json
+  createdAt DateTime @default(now()) @db.Timestamptz()
+
+  @@index([createdAt(sort: Desc)])
+  @@index([tableName])
+  @@map("notification_logs_table")
 }
 
+// ============================================================================
+// Приклад твої таблиці
+// ============================================================================
 model DataTable {
   id Int @id @default(autoincrement())
 
-  col_s_01 String?
-  col_s_02 String?
-  col_s_03 String?
-  col_s_04 String?
-  col_s_05 String?
-  col_s_06 String?
-  col_s_07 String?
-  col_s_08 String?
-  col_s_09 String?
-  col_s_10 String?
-  col_s_11 String?
+  // Boolean columns
+  col_b_01 Boolean @default(false)
+  col_b_02 Boolean @default(false)
+  col_b_03 Boolean @default(false)
+  col_b_04 Boolean @default(false)
+  col_b_05 Boolean @default(false)
+  col_b_06 Boolean @default(false)
+  col_b_07 Boolean @default(false)
+  col_b_08 Boolean @default(false)
+  col_b_09 Boolean @default(false)
+  col_b_10 Boolean @default(false)
+  col_b_11 Boolean @default(false)
 
-  col_n_01 Int?
-  col_n_02 Int?
-  col_n_03 Int?
-  col_n_04 Int?
-  col_n_05 Int?
-  col_n_06 Int?
-  col_n_07 Int?
-  col_n_08 Int?
-  col_n_09 Int?
-  col_n_10 Int?
-  col_n_11 Int?
+  // Numeric columns
+  col_n_01 Int @default(0)
+  col_n_02 Int @default(0)
+  col_n_03 Int @default(0)
+  col_n_04 Int @default(0)
+  col_n_05 Int @default(0)
+  col_n_06 Int @default(0)
+  col_n_07 Int @default(0)
+  col_n_08 Int @default(0)
+  col_n_09 Int @default(0)
+  col_n_10 Int @default(0)
+  col_n_11 Int @default(0)
 
-  col_b_01 Boolean?
-  col_b_02 Boolean?
-  col_b_03 Boolean?
-  col_b_04 Boolean?
-  col_b_05 Boolean?
-  col_b_06 Boolean?
-  col_b_07 Boolean?
-  col_b_08 Boolean?
-  col_b_09 Boolean?
-  col_b_10 Boolean?
-  col_b_11 Boolean?
+  // String columns
+  col_s_01 String? @db.VarChar(255)
+  col_s_02 String? @db.VarChar(255)
+  col_s_03 String? @db.VarChar(255)
+  col_s_04 String? @db.VarChar(255)
+  col_s_05 String? @db.Text
+  col_s_06 String? @db.VarChar(255)
+  col_s_07 String? @db.Text
+  col_s_08 String? @db.VarChar(255)
+  col_s_09 String? @db.VarChar(255)
+  col_s_10 String? @db.VarChar(255)
+  col_s_11 String? @db.Text
+
+  createdAt DateTime @default(now()) @db.Timestamptz()
+  updatedAt DateTime @updatedAt @db.Timestamptz()
 
   @@map("data_table")
-}
-
-model NotificationLogTable {
-  id         Int      @id @default(autoincrement())
-  created_at DateTime @default(now()) @map("created_at")
-  table_name String   @map("table_name") @db.Text
-  action     String   @db.Text
-  payload    Json     @db.JsonB
-
-  @@map("notification_logs_table")
 }
