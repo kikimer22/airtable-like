@@ -1,7 +1,10 @@
 'use client';
 
 import { useRef, useCallback } from 'react';
-import type { SSENotification } from '@/lib/types';
+import { DataTableRow, PageParam, SSENotification, TableResponse } from '@/lib/types';
+import { debug, warn, error } from '@/lib/logger';
+import { getQueryClient } from '@/lib/getQueryClient';
+import { InfiniteData } from '@tanstack/react-query';
 
 interface UseSSEListenerOptions {
   onMessage: (notification: SSENotification) => void;
@@ -17,52 +20,78 @@ export const useSSEListener = ({
   onDisconnect,
 }: UseSSEListenerOptions) => {
   const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<number | null>(null);
   const isManuallyClosedRef = useRef(false);
+  const lastSeenRef = useRef<Set<string>>(new Set());
 
   const connect = useCallback(() => {
     if (eventSourceRef.current) return;
     if (!('EventSource' in window)) {
-      const error = new Error('EventSource is not supported');
-      onError?.(error);
+      const err = new Error('EventSource is not supported');
+      onError?.(err);
       return;
     }
 
     try {
       isManuallyClosedRef.current = false;
-      eventSourceRef.current = new EventSource('/api/table/notifications');
+      const es = new EventSource('/api/table/notifications');
+      eventSourceRef.current = es;
 
-      eventSourceRef.current.addEventListener('open', () => {
-        console.log('✅ SSE connected');
+      es.addEventListener('open', () => {
+        debug('SSE connected', 'sse');
         onConnect?.();
       });
 
-      eventSourceRef.current.addEventListener('message', (event) => {
+      es.addEventListener('message', (event) => {
         try {
-          // Ігноруємо service повідомлення
           if (event.data.startsWith(':')) return;
 
           const notification: SSENotification = JSON.parse(event.data);
+
+          const key = `${notification.tableName}-${notification.logId.toString()}`;
+          if (lastSeenRef.current.has(key)) return;
+          lastSeenRef.current.add(key);
+
           onMessage(notification);
-        } catch (error) {
-          console.error('❌ Parse error:', error);
-          onError?.(error instanceof Error ? error : new Error('Parse failed'));
+
+          const queryClient = getQueryClient();
+          const pages = queryClient.getQueryData<InfiniteData<TableResponse, PageParam>>(['table']);
+          if (!pages?.pages) return;
+
+          const changedId = notification.payload.id;
+          const affected = pages.pages.some((p: TableResponse) => p.data.some((r: DataTableRow) => r.id === changedId));
+          if (!affected) return;
+
+          queryClient.setQueryData(['table'], (old: InfiniteData<TableResponse, PageParam>) => {
+            if (!old?.pages) return old;
+            const updatedPages = old.pages.map((page: TableResponse) => ({
+              ...page,
+              data: page.data.map((row: DataTableRow) => (row.id === changedId ? { ...row, ...notification.payload.data } : row)),
+            }));
+            return { ...old, pages: updatedPages };
+          });
+
+          debug({ table: notification.tableName, id: changedId }, 'sse-merge');
+        } catch (err) {
+          error('SSE parse/merge error', err);
+          onError?.(err instanceof Error ? err : new Error('SSE parse failed'));
         }
       });
 
-      eventSourceRef.current.addEventListener('error', () => {
+      es.addEventListener('error', () => {
         if (isManuallyClosedRef.current) return;
 
-        console.warn('⚠️ SSE error, reconnecting...');
-        eventSourceRef.current?.close();
+        warn('SSE error, attempting reconnect', 'sse');
+        es.close();
         eventSourceRef.current = null;
         onDisconnect?.();
 
         const delay = Math.min(1000 * Math.pow(2, 3), 30000);
-        reconnectTimeoutRef.current = setTimeout(connect, delay);
+        // window.setTimeout returns number
+        reconnectTimeoutRef.current = window.setTimeout(connect, delay) as unknown as number;
       });
-    } catch (error) {
-      onError?.(error instanceof Error ? error : new Error('Connection failed'));
+    } catch (err) {
+      onError?.(err instanceof Error ? err : new Error('Connection failed'));
     }
   }, [onMessage, onError, onConnect, onDisconnect]);
 
@@ -70,7 +99,7 @@ export const useSSEListener = ({
     isManuallyClosedRef.current = true;
 
     if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
+      window.clearTimeout(reconnectTimeoutRef.current as number);
     }
 
     if (eventSourceRef.current) {

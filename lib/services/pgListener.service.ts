@@ -1,3 +1,5 @@
+import { debug, error, warn } from '@/lib/logger';
+
 export const runtime = 'nodejs';
 
 import { Client, Notification } from 'pg';
@@ -38,12 +40,12 @@ class PgListenerService {
       // which does not reliably deliver NOTIFY/LISTEN to long-lived connections.
       const lower = connectionString.toLowerCase();
       if (!process.env.DIRECT_DATABASE_URL && (lower.includes('pooler') || lower.includes('neon'))) {
-        console.warn('\n⚠️  pgListener.service warning: your DATABASE_URL looks like a Neon pooler endpoint.');
-        console.warn('   LISTEN/NOTIFY may not work reliably through the pooler.');
-        console.warn('   Please set DIRECT_DATABASE_URL (direct DB connection) in your environment and restart the server.');
-        console.warn('   Example (Neon) – get the direct connection string from your Neon dashboard.');
-        console.warn('   For local dev you can set DIRECT_DATABASE_URL in .env and restart:');
-        console.warn('     DIRECT_DATABASE_URL="postgresql://<user>:<pw>@<direct-host>/<db>?sslmode=require"\n');
+        warn('\n⚠️  pgListener.service warning: your DATABASE_URL looks like a Neon pooler endpoint.');
+        warn('   LISTEN/NOTIFY may not work reliably through the pooler.');
+        warn('   Please set DIRECT_DATABASE_URL (direct DB connection) in your environment and restart the server.');
+        warn('   Example (Neon) – get the direct connection string from your Neon dashboard.');
+        warn('   For local dev you can set DIRECT_DATABASE_URL in .env and restart:');
+        warn('     DIRECT_DATABASE_URL="postgresql://<user>:<pw>@<direct-host>/<db>?sslmode=require"\n');
       }
 
       this.client = new Client({
@@ -52,13 +54,13 @@ class PgListenerService {
         ssl: { rejectUnauthorized: false },
       });
 
-      console.log('📡 Connecting to PostgreSQL for LISTEN (pgListener.service)...');
+      debug('📡 Connecting to PostgreSQL for LISTEN (pgListener.service)...');
       // Log safe host info for debugging (redact credentials)
       try {
         const url = new URL(connectionString);
-        console.log(`📡 Using DB host: ${url.host}`);
+        debug(`📡 Using DB host: ${url.host}`);
       } catch {
-        console.log('📡 Using connection string: [redacted]');
+        debug('📡 Using connection string: [redacted]');
       }
 
       await this.client.connect();
@@ -68,38 +70,38 @@ class PgListenerService {
       this.client.on('notification', this.handleNotification.bind(this));
 
       this.client.on('error', (err) => {
-        console.error('❌ PG Client error in pgListener.service:', err);
+        error('❌ PG Client error in pgListener.service:', err);
         this.reconnect();
       });
 
       this.isConnected = true;
-      console.log('✅ PostgreSQL LISTEN initialized (pgListener.service)');
-    } catch (error) {
-      console.error('❌ Failed to connect to PostgreSQL (pgListener.service):', error);
+      debug('✅ PostgreSQL LISTEN initialized (pgListener.service)');
+    } catch (err) {
+      error('❌ Failed to connect to PostgreSQL (pgListener.service):', err);
       this.isConnected = false;
-      throw error;
+      throw err;
     }
   }
 
   private async handleNotification(notification: Notification): Promise<void> {
     try {
-      console.log('📣 pgListener.service received notification payload:', notification.payload);
+      debug('📣 pgListener.service received notification payload:', notification.payload);
 
       // Parse payload as bigint (Postgres NOTIFY sends the log id as text)
       let logId: bigint;
       try {
         logId = BigInt(notification.payload ?? '0');
-      } catch (e) {
-        console.warn('⚠️ Invalid payload in pgListener.service (not a bigint):', notification.payload);
+      } catch (err) {
+        error('⚠️ Invalid payload in pgListener.service (not a bigint):', notification.payload, 'err:', err);
         return;
       }
 
       if (logId === BigInt(0)) {
-        console.warn('⚠️ Ignoring zero/invalid log id in pgListener.service:', notification.payload);
+        warn('⚠️ Ignoring zero/invalid log id in pgListener.service:', notification.payload);
         return;
       }
 
-      console.log('📨 Received notification for log ID (pgListener.service):', logId.toString());
+      debug('📨 Received notification for log ID (pgListener.service):', logId.toString());
 
       const entry = await prisma.notificationLog.findUnique({
         where: { id: logId },
@@ -107,7 +109,7 @@ class PgListenerService {
       });
 
       if (!entry) {
-        console.warn('⚠️ Entry not found for ID (pgListener.service):', logId);
+        warn('⚠️ Entry not found for ID (pgListener.service):', logId);
         return;
       }
 
@@ -115,8 +117,8 @@ class PgListenerService {
       // and format SSE for each connected client. This avoids duplicating JSON
       // formatting between listeners and routes and keeps the listener lightweight.
       await this.broadcastToClients(entry.id.toString());
-    } catch (error) {
-      console.error('❌ Error handling notification (pgListener.service):', error);
+    } catch (err) {
+      error('❌ Error handling notification (pgListener.service):', err);
     }
   }
 
@@ -126,8 +128,8 @@ class PgListenerService {
     for (const writer of this.clients) {
       try {
         await writer.write(message);
-      } catch (error) {
-        console.warn('⚠️ Failed to write to client, removing...');
+      } catch (err) {
+        error('⚠️ Failed to write to client, removing...', err);
         failedWriters.push(writer);
       }
     }
@@ -136,7 +138,7 @@ class PgListenerService {
   }
 
   private async reconnect(): Promise<void> {
-    console.log('🔄 Attempting to reconnect (pgListener.service)...');
+    debug('🔄 Attempting to reconnect (pgListener.service)...');
     this.isConnected = false;
     this.client = null;
 
@@ -148,7 +150,7 @@ class PgListenerService {
     if (this.client) {
       await this.client.end();
       this.isConnected = false;
-      console.log('✅ Disconnected from PostgreSQL (pgListener.service)');
+      debug('✅ Disconnected from PostgreSQL (pgListener.service)');
     }
   }
 

@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useEffectEvent } from 'react';
+import { useState, useEffect, useCallback, useEffectEvent } from 'react';
 import { useSelectorEditableCell } from '@/lib/store/optimisticUpdatesStore';
 
 interface UseEditableCellProps {

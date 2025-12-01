@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useMemo } from 'react';
-import type { InfiniteData } from '@tanstack/react-query';
+import type { InfiniteData, UseInfiniteQueryResult } from '@tanstack/react-query';
 import { getQueryClient } from '@/lib/getQueryClient';
 import type { CellChange, DataTableRow, PageParam, TableResponse } from '@/lib/types';
 import { useSelectorOptimisticUpdates } from '@/lib/store/optimisticUpdatesStore';
+import { error, warn } from '@/lib/logger';
 
 export function useOptimisticUpdates() {
   const queryClient = getQueryClient();
@@ -53,7 +54,7 @@ export function useOptimisticUpdates() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({})) as Record<string, unknown>;
         const details = typeof data.details === 'string' ? data.details : `Server error: ${res.status}`;
-        console.error('update-cells failed:', details);
+        error('update-cells failed:', details);
         return false;
       }
 
@@ -86,19 +87,19 @@ export function useOptimisticUpdates() {
         try {
           await queryClient.invalidateQueries({ queryKey: ['table'] });
         } catch {
-          console.warn('revalidate table failed');
+          warn('revalidate table failed');
         }
       }
 
       return true;
     } catch (err) {
-      console.error('save failed', err);
+      error('save failed', err);
       return false;
     }
   }, [getPendingChanges, queryClient, clearAll]);
 
   const cancelChanges = useCallback(() => {
-    const pages = queryClient.getQueryData(['table']);
+    const pages = queryClient.getQueryData<UseInfiniteQueryResult<InfiniteData<TableResponse, PageParam>, Error>>(['table']);
     clearAll();
     if (pages) {
       void queryClient.invalidateQueries({ queryKey: ['table'] });

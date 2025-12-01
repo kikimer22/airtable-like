@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma';
 import type { FieldChange, NotificationPayload, SSENotification } from '@/lib/types';
+import { error, warn, debug } from '@/lib/logger';
 
 class NotificationService {
   async getLogById(logId: bigint): Promise<SSENotification | null> {
@@ -16,19 +17,19 @@ class NotificationService {
       });
 
       if (!log) {
-        console.warn('⚠️ Log not found:', logId);
+        warn('⚠️ Log not found:', logId);
         return null;
       }
 
       return {
-        logId: String(log.id),
+        logId: String(log.id) as unknown as bigint,
         tableName: log.tableName,
         action: log.action as 'INSERT' | 'UPDATE' | 'DELETE',
         payload: this.validatePayload(log.payload),
         createdAt: log.createdAt,
       };
-    } catch (error) {
-      console.error('❌ Error fetching notification log:', error);
+    } catch (err) {
+      error('❌ Error fetching notification log:', err);
       return null;
     }
   }
@@ -80,7 +81,7 @@ class NotificationService {
       },
     });
 
-    console.log(`🧹 Deleted ${result.count} old notification logs`);
+    debug(`🧹 Deleted ${result.count} old notification logs`);
     return result.count;
   }
 

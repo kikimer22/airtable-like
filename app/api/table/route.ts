@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { TABLE_CONFIG } from '@/lib/constants';
 import { decodeCursor, encodeCursor } from '@/lib/utils';
 import { PaginationResponse } from '@/lib/types';
+import { error } from '@/lib/logger';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
@@ -75,10 +76,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         pageSize,
       },
     });
-  } catch (error) {
-    console.error('Pagination error:', error);
-    if (error instanceof Error && error.message === 'Invalid cursor format') {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+  } catch (err) {
+    error('Pagination error:', err);
+    if (err instanceof Error && err.message === 'Invalid cursor format') {
+      return NextResponse.json({ error: err.message }, { status: 400 });
     }
     return NextResponse.json({ error: 'Failed to load data' }, { status: 500 });
   }

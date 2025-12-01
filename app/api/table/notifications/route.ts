@@ -1,3 +1,5 @@
+import { debug, warn, error } from '@/lib/logger';
+
 export const runtime = 'nodejs';
 
 import { connectPgOnce, clients } from '@/lib/services/pgListener.service';
@@ -20,42 +22,38 @@ export async function GET(request: Request): Promise<Response> {
         controller.enqueue(encoder.encode(': SSE connected\n\n'));
 
         const writer = {
-          // The clients set expects a writer with signature write(data: string)
           write: async (data: string) => {
             try {
               const trimmed = typeof data === 'string' ? data.trim() : String(data);
 
-              // If it's already a preformatted SSE payload, enqueue directly
               if (trimmed.startsWith('data:')) {
                 controller.enqueue(encoder.encode(trimmed + '\n\n'));
                 return { done: false };
               }
 
-              // If it's numeric text (log id), try to fetch the notification
               if (/^\d+$/.test(trimmed)) {
                 const logId = BigInt(trimmed);
                 const notification = await notificationService.getLogById(logId);
 
                 if (!notification) {
-                  console.warn('⚠️ Could not retrieve notification data for logId:', logId);
+                  warn('⚠️ Could not retrieve notification data for logId:', logId);
                   return { done: false };
                 }
 
-                // Safe stringify: convert BigInt to string
                 const safeJson = JSON.stringify(notification, (_key, value) =>
                   typeof value === 'bigint' ? value.toString() : value
                 );
                 const sseData = `data: ${safeJson}\n\n`;
                 controller.enqueue(encoder.encode(sseData));
 
-                console.log(`📨 Sent notification: ${notification.tableName} ${notification.action}`);
+                debug(`📨 Sent notification: ${notification.tableName} ${notification.action}`);
                 return { done: false };
               }
 
               // Unexpected payload
-              console.warn('⚠️ Writer received unexpected message:', data);
-            } catch (error) {
-              console.error('❌ Error processing notification:', error);
+              warn('⚠️ Writer received unexpected message:', data);
+            } catch (err) {
+              error('❌ Error processing notification:', err);
             }
 
             return { done: false };
@@ -77,11 +75,11 @@ export async function GET(request: Request): Promise<Response> {
           clearInterval(heartbeatInterval);
           clients.delete(writer);
           controller.close();
-          console.log('🔌 SSE client disconnected');
+          debug('🔌 SSE client disconnected');
         });
-      } catch (error) {
-        console.error('❌ SSE stream error:', error);
-        controller.error(error);
+      } catch (err) {
+        error('❌ SSE stream error:', err);
+        controller.error(err);
       }
     },
   });

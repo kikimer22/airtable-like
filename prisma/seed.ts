@@ -1,18 +1,14 @@
 import 'dotenv/config';
-// import { PrismaClient } from '@/lib/generated/prisma/client';
 import prisma from '@/lib/prisma';
 import { faker } from '@faker-js/faker';
-
-// const prisma = new PrismaClient();
+import { debug, error } from '@/lib/logger';
 
 // ============================================================================
 // ТИПИ
 // ============================================================================
 
-type BooleanStrategy = 'true_probability' | 'balanced';
 type VarcharStrategy = 'name' | 'email' | 'slug' | 'word' | 'sentence' | 'mixed';
 type TextStrategy = 'sentence' | 'paragraph' | 'mixed';
-type LocaleType = 'uk_UA' | 'en_US' | 'de_DE' | 'fr_FR' | 'es_ES' | 'it_IT';
 
 interface SeedConfig {
   // Кількість записів
@@ -31,7 +27,6 @@ interface SeedConfig {
 
   // Конфігурація String колон
   stringConfig: {
-    locale: LocaleType;
     varcharStrategy: VarcharStrategy;
     textStrategy: TextStrategy;
     nullProbability: number; // 0-1, ймовірність null
@@ -97,7 +92,6 @@ const DEFAULT_CONFIG: SeedConfig = {
   },
 
   stringConfig: {
-    locale: 'uk_UA',
     varcharStrategy: 'mixed',
     textStrategy: 'paragraph',
     nullProbability: 0.1,
@@ -109,30 +103,14 @@ const DEFAULT_CONFIG: SeedConfig = {
 };
 
 // ============================================================================
-// LOCALE MAPPER
-// ============================================================================
-
-const LOCALE_MAP: Record<LocaleType, string> = {
-  uk_UA: 'uk',
-  en_US: 'en_US',
-  de_DE: 'de',
-  fr_FR: 'fr',
-  es_ES: 'es',
-  it_IT: 'it',
-};
-
-// ============================================================================
 // ГЕНЕРАТОР ДАНИХ
 // ============================================================================
 
 class DataGenerator {
   private config: SeedConfig;
-  private localeCode: string;
 
   constructor(config: SeedConfig) {
     this.config = config;
-    this.localeCode = LOCALE_MAP[config.stringConfig.locale];
-    // faker.setDefaultLocale(this.localeCode);
   }
 
   /**
@@ -208,8 +186,7 @@ class DataGenerator {
         return faker.lorem.word();
       }
       default: {
-        const exhaustive: never = strategy;
-        throw new Error(`Unknown strategy: ${exhaustive}`);
+        throw new Error(`Unknown strategy: ${strategy}`);
       }
     }
   }
@@ -245,15 +222,13 @@ class DataGenerator {
         return faker.lorem.paragraphs({ min: 1, max: 3 });
       }
       case 'mixed': {
-        const choice = faker.helpers.arrayElement([
+        return faker.helpers.arrayElement([
           faker.lorem.sentence(),
           faker.lorem.paragraphs({ min: 1, max: 2 }),
         ]);
-        return choice;
       }
       default: {
-        const exhaustive: never = strategy;
-        throw new Error(`Unknown strategy: ${exhaustive}`);
+        throw new Error(`Unknown strategy: ${strategy}`);
       }
     }
   }
@@ -377,13 +352,6 @@ function parseArgs(): SeedConfig {
         }
         break;
       }
-      case '--locale': {
-        const locales: LocaleType[] = ['uk_UA', 'en_US', 'de_DE', 'fr_FR', 'es_ES', 'it_IT'];
-        if (locales.includes(value as LocaleType)) {
-          config.stringConfig.locale = value as LocaleType;
-        }
-        break;
-      }
       case '--no-verbose': {
         config.verbose = false;
         break;
@@ -403,13 +371,13 @@ async function seed(config: SeedConfig = DEFAULT_CONFIG): Promise<void> {
     const generator = new DataGenerator(config);
 
     if (config.verbose) {
-      console.log('🌱 Starting DataTable seed...');
-      console.log('📊 Configuration:', JSON.stringify(config, null, 2));
+      debug('🌱 Starting DataTable seed...');
+      debug('📊 Configuration:', JSON.stringify(config, null, 2));
     }
 
     // Очищуємо таблицю
     if (config.verbose) {
-      console.log('🗑️  Cleaning existing data...');
+      debug('🗑️  Cleaning existing data...');
     }
     await prisma.dataTable.deleteMany({});
 
@@ -437,7 +405,7 @@ async function seed(config: SeedConfig = DEFAULT_CONFIG): Promise<void> {
 
       if (config.verbose) {
         const progress = Math.round((recordsCreated / config.recordCount) * 100);
-        console.log(
+        debug(
           `✅ Batch ${batch + 1}/${totalBatches} completed (${progress}%) - ${recordsCreated}/${config.recordCount} records`
         );
       }
@@ -446,11 +414,11 @@ async function seed(config: SeedConfig = DEFAULT_CONFIG): Promise<void> {
     // Статистика
     const count = await prisma.dataTable.count();
     if (config.verbose) {
-      console.log('✨ Seed completed successfully!');
-      console.log(`📈 Total records in database: ${count.toLocaleString()}`);
+      debug('✨ Seed completed successfully!');
+      debug(`📈 Total records in database: ${count.toLocaleString()}`);
     }
-  } catch (error) {
-    console.error('❌ Seed error:', error);
+  } catch (err) {
+    error('❌ Seed error:', err);
     process.exit(1);
   } finally {
     await prisma.$disconnect();
@@ -462,4 +430,4 @@ async function seed(config: SeedConfig = DEFAULT_CONFIG): Promise<void> {
 // ============================================================================
 
 const config = parseArgs();
-seed(config);
+void seed(config);
