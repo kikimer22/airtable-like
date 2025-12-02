@@ -6,13 +6,20 @@ import { connectPgOnce, clients } from '@/lib/services/pgListener.service';
 import { notificationService } from '@/lib/services/notification.service';
 
 export async function GET(request: Request): Promise<Response> {
-  await connectPgOnce();
+  try {
+    await connectPgOnce();
+  } catch (err) {
+    warn('⚠️ pgListener failed to connect for SSE endpoint, continuing without DB listener:', err);
+  }
   const headers: Record<string, string> = {
-    'Content-Type': 'text/event-stream; charset=utf-8',
-    'Cache-Control': 'no-cache',
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
   };
+
+  let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  let writer: { write: (data: string) => Promise<{ done: boolean }>; } | null = null;
 
   const responseStream = new ReadableStream({
     async start(controller) {
@@ -21,10 +28,10 @@ export async function GET(request: Request): Promise<Response> {
       try {
         controller.enqueue(encoder.encode(': SSE connected\n\n'));
 
-        const writer = {
+        writer = {
           write: async (data: string) => {
             try {
-              const trimmed = typeof data === 'string' ? data.trim() : String(data);
+              const trimmed = data.trim();
 
               if (trimmed.startsWith('data:')) {
                 controller.enqueue(encoder.encode(trimmed + '\n\n'));
@@ -52,34 +59,62 @@ export async function GET(request: Request): Promise<Response> {
 
               // Unexpected payload
               warn('⚠️ Writer received unexpected message:', data);
+              return { done: false };
             } catch (err) {
-              error('❌ Error processing notification:', err);
+              error('❌ Error processing notification (writer):', err);
+              throw err instanceof Error ? err : new Error(String(err));
             }
-
-            return { done: false };
           },
         };
 
-        clients.add(writer);
+        clients.add(writer!);
+        debug('🔌 SSE client added, total clients:' + String(clients.size));
 
-        const heartbeatInterval = setInterval(() => {
+        heartbeatInterval = setInterval(() => {
           try {
             controller.enqueue(encoder.encode(': heartbeat\n\n'));
-          } catch {
-            clearInterval(heartbeatInterval);
+          } catch (err) {
+            error('❌ SSE heartbeat error:', err);
+            if (heartbeatInterval) {
+              clearInterval(heartbeatInterval);
+              heartbeatInterval = null;
+            }
           }
         }, 30000);
 
-        // Cleanup on abort
         request.signal.addEventListener('abort', () => {
-          clearInterval(heartbeatInterval);
-          clients.delete(writer);
-          controller.close();
-          debug('🔌 SSE client disconnected');
+          if (heartbeatInterval) {
+            clearInterval(heartbeatInterval);
+            heartbeatInterval = null;
+          }
+          if (writer) {
+            clients.delete(writer);
+            writer = null;
+          }
+          try {
+            controller.close();
+          } catch {}
+          debug('🔌 SSE client disconnected (abort), total clients:' + String(clients.size));
         });
+
       } catch (err) {
         error('❌ SSE stream error:', err);
         controller.error(err);
+      }
+    },
+    cancel(reason) {
+      try {
+        debug('🔌 ReadableStream cancelled, reason:', reason);
+        if (heartbeatInterval) {
+          clearInterval(heartbeatInterval);
+          heartbeatInterval = null;
+        }
+        if (writer) {
+          clients.delete(writer);
+          writer = null;
+        }
+      } catch (err) {
+        error('❌ Error during ReadableStream cancel:', err);
       }
     },
   });
