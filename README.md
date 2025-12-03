@@ -1,36 +1,135 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Airtable-like Next.js App
 
-## Getting Started
+This is an Airtable-like data table application built with [Next.js](https://nextjs.org) and PostgreSQL (Neon).
 
-First, run the development server:
+### Prerequisites
+
+- Docker Desktop must be running locally.
+- Node.js and `pnpm` installed globally.
+- Access to a Neon PostgreSQL database.
+
+---
+
+### Option 1: Run with Docker (recommended)
+
+#### 0. Ensure Docker Desktop is running
+
+Make sure Docker Desktop is started and running on your machine.
+
+#### 1. Pull or clone the repository
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <your-repo-url>
+cd airtable-like
+git pull origin main  # if you already have the repo
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+#### 2. Create `.env` in the project root
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Create a `.env` file in the root of the project with at least the following variables:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+DATABASE_URL="postgresql://<user>:<password>@<host>/<database>?sslmode=require&options=project%3D<neon-project-id>-pooler"
+DIRECT_DATABASE_URL="postgresql://<user>:<password>@<host>/<database>?sslmode=require&options=project%3D<neon-project-id>"
+```
 
-## Learn More
+- **`DATABASE_URL`**: connection string to the Neon PostgreSQL DB **through the pooler** (usually contains `-pooler` in the host or extra options).
+- **`DIRECT_DATABASE_URL`**: same database connection string **without the pooler** (for direct connections / migrations).
 
-To learn more about Next.js, take a look at the following resources:
+Adjust the exact URLs according to your Neon project settings.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+#### 3. Open a terminal in the project root
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+From the root directory of the project (`airtable-like`):
 
-## Deploy on Vercel
+```bash
+cd /path/to/airtable-like
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+#### 4. Install dependencies
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pnpm i
+```
+
+#### 5. Generate Prisma client
+
+```bash
+npx prisma generate
+```
+
+#### 6. Start the app with Docker Compose
+
+```bash
+docker compose up --build
+```
+
+This will start two services:
+
+- **Development**:  
+  - URL: `http://localhost:3001`  
+  - Command: `pnpm dev` (`next dev -p 3001`)
+
+- **Production-like**:  
+  - URL: `http://localhost:3000`  
+  - Command: `pnpm start` (`next start`)
+
+Stop the services with `Ctrl + C` and, if needed, remove containers with:
+
+```bash
+docker compose down
+```
+
+---
+
+### Option 2: Run locally without Docker
+
+If you prefer to run the app without Docker, you can use the standard Next.js scripts.
+
+#### 1. Install dependencies
+
+```bash
+pnpm i
+```
+
+#### 2. Generate Prisma client
+
+```bash
+npx prisma generate
+```
+
+#### 3. Ensure `.env` is configured
+
+Use the same `.env` file as described in Option 1 (with `DATABASE_URL` and `DIRECT_DATABASE_URL` pointing to your Neon PostgreSQL database).
+
+#### 4. Development mode
+
+In `package.json` you should have:
+
+```json
+{
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start"
+  }
+}
+```
+
+Start the dev server:
+
+```bash
+pnpm dev
+```
+
+Open `http://localhost:3001` in your browser.
+
+#### 5. Production build locally
+
+```bash
+pnpm build
+pnpm start
+```
+
+By default this will start on `http://localhost:3000` (or use `PORT` env to override).
+
