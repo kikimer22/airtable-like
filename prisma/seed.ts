@@ -80,7 +80,7 @@ interface DataTableRecord {
 // ============================================================================
 
 const DEFAULT_CONFIG: SeedConfig = {
-  recordCount: 1001,
+  recordCount: 5001,
 
   booleanConfig: {
     trueProbability: 0.5,
