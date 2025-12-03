@@ -18,6 +18,7 @@ ENV NODE_ENV=$NODE_ENV
 ENV NEXT_TELEMETRY_DISABLED=$NEXT_TELEMETRY_DISABLED
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN npx prisma generate
 RUN pnpm build
 
 FROM node:20-alpine AS runner
