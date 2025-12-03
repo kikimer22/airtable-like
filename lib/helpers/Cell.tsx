@@ -20,6 +20,18 @@ const Cell = (kind: TableFieldKind): Partial<ColumnDef<DataTableRow>> => {
           />
         );
       }
+      if (kind === 'createdAt' || kind === 'updatedAt') {
+        if (value === null || typeof value === 'undefined') return null;
+        const dateObject = new Date(value as Date);
+        return (
+          <DefaultCell
+            key={`${original.id}-${id}`}
+            value={dateObject.toLocaleString()}
+            rowIndex={index}
+            columnId={id}
+          />
+        );
+      }
       return (
         <DefaultCell
           key={`${index}-${id}`}

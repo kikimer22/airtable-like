@@ -5,9 +5,9 @@ import { createRange, padKey } from '@/lib/utils';
 import { TABLE_CONFIG } from '@/lib/constants';
 
 export const TABLE_COLUMN_SEGMENTS = [
-  { prefix: 'col_s_', start: 1, end: 4, kind: 'string' as const }, // 11
-  { prefix: 'col_n_', start: 1, end: 4, kind: 'number' as const }, // 11
-  { prefix: 'col_b_', start: 1, end: 4, kind: 'boolean' as const }, // 11
+  { prefix: 'col_s_', start: 1, end: 9, kind: 'string' as const }, // 11
+  { prefix: 'col_n_', start: 1, end: 9, kind: 'number' as const }, // 11
+  { prefix: 'col_b_', start: 1, end: 9, kind: 'boolean' as const }, // 11
 ] as const;
 
 const buildKeys = (): string[] => {
@@ -15,23 +15,26 @@ const buildKeys = (): string[] => {
     .flatMap(({ prefix, start, end }) =>
       createRange(start, end).map((value) => `${prefix}${padKey(value)}`),
     );
-  return ['id', ...dynamicKeys];
+  return ['id', ...dynamicKeys, 'createdAt', 'updatedAt'];
 };
 
 export const TABLE_FIELD_KEYS = buildKeys();
 
 export type TableFieldKey = (typeof TABLE_FIELD_KEYS)[number];
 
-export type TableFieldKind = (typeof TABLE_COLUMN_SEGMENTS)[number]['kind'] | 'id';
+export type TableFieldKind = (typeof TABLE_COLUMN_SEGMENTS)[number]['kind'] | 'id' | 'createdAt' | 'updatedAt';
 
 export const getFieldKind = (field: TableFieldKey): TableFieldKind => {
   if (field === 'id') return 'id';
+  if (field === 'createdAt') return 'createdAt';
+  if (field === 'updatedAt') return 'updatedAt';
   const segment = TABLE_COLUMN_SEGMENTS.find(({ prefix }) => field.startsWith(prefix));
   return segment?.kind ?? 'string';
 };
 
 const getSizeForKind = (kind: TableFieldKind): number => {
   if (kind === 'id') return TABLE_CONFIG.COLUMN_WIDTHS_ID;
+  if (kind === 'createdAt' || kind === 'updatedAt') return TABLE_CONFIG.COLUMN_WIDTHS_DATE;
   if (kind === 'number') return TABLE_CONFIG.COLUMN_WIDTHS_NUMBER;
   if (kind === 'boolean') return TABLE_CONFIG.COLUMN_WIDTHS_BOOLEAN;
   return TABLE_CONFIG.COLUMN_WIDTHS_STRING;
